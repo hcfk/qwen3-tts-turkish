@@ -21,7 +21,7 @@ TURKISH_LANG_ID = 2072
 def load_model(model_dir: str, adapter_dir: str):
     print("Loading base model...")
     tts_wrapper = Qwen3TTSModel.from_pretrained(
-        model_dir, device_map="cuda", torch_dtype=torch.bfloat16
+        model_dir, device_map="cuda", dtype=torch.bfloat16
     )
     print("Loading LoRA adapter...")
     tts_wrapper.model.talker.model = PeftModel.from_pretrained(

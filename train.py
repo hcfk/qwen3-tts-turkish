@@ -178,7 +178,7 @@ def main():
 
     print("Loading TTS model...")
     tts_wrapper = Qwen3TTSModel.from_pretrained(
-        args.model_dir, device_map="cuda", torch_dtype=dtype
+        args.model_dir, device_map="cuda", dtype=dtype
     )
     inner_model = tts_wrapper.model
     talker = inner_model.talker

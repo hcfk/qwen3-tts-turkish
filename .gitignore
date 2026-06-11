@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Dataset & model files (too large for git)
+datasets/
+*.npy
+*_metadata.json
+*.wav
+*.mp3
+*.flac
+
+# Model checkpoints & adapters
+checkpoints/
+*.safetensors
+*.bin
+*.pt
+*.pth
+
+# Logs
+*.log
+runs/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

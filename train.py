@@ -216,6 +216,17 @@ def main():
     inner_model.config.talker_config.codec_language_id["turkish"] = TURKISH_LANG_ID
     inner_model.supported_languages = list(inner_model.supported_languages) + ["turkish"]
 
+    # Initialize Turkish language token embedding to mean of existing language embeddings.
+    # Successful community fine-tunes (Hindi, Arabic) all do this instead of leaving it random.
+    with torch.no_grad():
+        emb_weight = talker.get_input_embeddings().weight  # [vocab_size, H]
+        # Existing language token IDs in codec vocab: zh=2064, en=2065, jp=2066, ko=2067,
+        # de=2068, fr=2069, ru=2070, pt=2071, es=2073, it=2074 (2072 is our Turkish slot)
+        existing_lang_ids = [2064, 2065, 2066, 2067, 2068, 2069, 2070, 2071, 2073, 2074]
+        mean_lang_emb = emb_weight[existing_lang_ids].mean(dim=0)
+        emb_weight[TURKISH_LANG_ID] = mean_lang_emb
+        print(f"Initialized Turkish lang embedding (id={TURKISH_LANG_ID}) to mean of {len(existing_lang_ids)} language embeddings")
+
     if args.resume_from:
         print(f"Resuming from {args.resume_from} ...")
         talker.model = PeftModel.from_pretrained(talker.model, args.resume_from, is_trainable=True)

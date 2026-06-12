@@ -50,9 +50,9 @@ def synthesize(tts, text, output_path):
         )
 
     speech_tok = tts.model.speech_tokenizer.model
-    codes_tensor = talker_codes[0].unsqueeze(0).cuda()
+    codes_tensor = talker_codes[0].unsqueeze(0).cuda()  # [1, T, 16]
     with torch.inference_mode():
-        wav = speech_tok.decode(codes_tensor.permute(0, 2, 1))
+        wav = speech_tok.decode(codes_tensor)
 
     wav_np = wav.squeeze().cpu().float().numpy()
     sf.write(output_path, wav_np, 24000)

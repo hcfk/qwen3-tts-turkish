@@ -179,19 +179,22 @@ def main():
     parser.add_argument("--output_dir",   required=True)
     parser.add_argument("--resume_from",  default=None,
                         help="Path to existing LoRA adapter to resume from")
-    parser.add_argument("--epochs",       type=int,   default=3)
-    parser.add_argument("--max_steps",    type=int,   default=0,
-                        help="Stop after this many steps (0 = no limit)")
-    parser.add_argument("--lr",           type=float, default=2e-6)
-    parser.add_argument("--max_t",        type=int,   default=512)
-    parser.add_argument("--lora_rank",    type=int,   default=64)
-    parser.add_argument("--lora_alpha",   type=int,   default=128)
-    parser.add_argument("--warmup_steps", type=int,   default=100)
-    parser.add_argument("--log_steps",    type=int,   default=50)
-    parser.add_argument("--save_steps",   type=int,   default=500)
-    parser.add_argument("--sample_every", type=int,   default=0,
+    parser.add_argument("--epochs",        type=int,   default=3)
+    parser.add_argument("--max_steps",     type=int,   default=1000,
+                        help="Stop after this many steps (0 = full epochs)")
+    parser.add_argument("--lr",            type=float, default=5e-6)
+    parser.add_argument("--max_t",         type=int,   default=150,
+                        help="Max codec frames (~12s at 12.5Hz)")
+    parser.add_argument("--lora_rank",     type=int,   default=64)
+    parser.add_argument("--lora_alpha",    type=int,   default=128)
+    parser.add_argument("--warmup_steps",  type=int,   default=50)
+    parser.add_argument("--log_steps",     type=int,   default=10)
+    parser.add_argument("--save_steps",    type=int,   default=100)
+    parser.add_argument("--sample_every",  type=int,   default=100,
                         help="Generate audio samples every N steps (0 = disabled)")
-    parser.add_argument("--sub_batch",    type=int,   default=256)
+    parser.add_argument("--early_stop",    type=int,   default=3,
+                        help="Stop if eval loss rises N consecutive evals (0 = disabled)")
+    parser.add_argument("--sub_batch",     type=int,   default=256)
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -229,7 +232,7 @@ def main():
     talker.model.print_trainable_parameters()
 
     train_ds = TSCDataset(f"{args.data_dir}/Train_metadata.json", args.max_t)
-    eval_ds  = TSCDataset(f"{args.data_dir}/Test_metadata.json",  max_t=128)
+    eval_ds  = TSCDataset(f"{args.data_dir}/Test_metadata.json",  max_t=args.max_t)
     train_dl = DataLoader(train_ds, batch_size=1, shuffle=True,
                           collate_fn=collate_single, num_workers=0)
     eval_dl  = DataLoader(eval_ds,  batch_size=1, shuffle=False,
@@ -245,10 +248,12 @@ def main():
     print(f"\nTraining: lr={args.lr:.1e}  max_steps={total_steps}"
           f"  resume={'yes' if args.resume_from else 'no'}")
 
-    global_step = 0
-    best_eval = float("inf")
-    log_loss = 0.0
-    done = False
+    global_step    = 0
+    best_eval      = float("inf")
+    eval_rises     = 0
+    prev_eval_loss = float("inf")
+    log_loss       = 0.0
+    done           = False
 
     for epoch in range(args.epochs):
         if done:
@@ -301,11 +306,20 @@ def main():
                 eval_loss = float(np.mean(eval_losses)) if eval_losses else float("inf")
                 print(f"  *** Eval loss: {eval_loss:.4f} (step {global_step}) ***")
                 if eval_loss < best_eval:
-                    best_eval = eval_loss
+                    best_eval  = eval_loss
+                    eval_rises = 0
                     ckpt = os.path.join(args.output_dir, "best")
                     os.makedirs(ckpt, exist_ok=True)
                     talker.model.save_pretrained(ckpt)
                     print(f"  Saved best checkpoint → {ckpt}")
+                else:
+                    if eval_loss > prev_eval_loss:
+                        eval_rises += 1
+                        print(f"  ↑ Eval loss yükseliyor ({eval_rises}/{args.early_stop})")
+                        if args.early_stop > 0 and eval_rises >= args.early_stop:
+                            print(f"  Early stop — eval loss {args.early_stop} kez üst üste yükseldi.")
+                            done = True
+                prev_eval_loss = eval_loss
                 talker.train()
 
             if args.sample_every > 0 and global_step % args.sample_every == 0:

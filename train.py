@@ -195,6 +195,8 @@ def main():
     parser.add_argument("--early_stop",    type=int,   default=3,
                         help="Stop if eval loss rises N consecutive evals (0 = disabled)")
     parser.add_argument("--sub_batch",     type=int,   default=256)
+    parser.add_argument("--grad_accum",    type=int,   default=4,
+                        help="Gradient accumulation steps (effective batch size = grad_accum)")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -220,9 +222,8 @@ def main():
     # Successful community fine-tunes (Hindi, Arabic) all do this instead of leaving it random.
     with torch.no_grad():
         emb_weight = talker.get_input_embeddings().weight  # [vocab_size, H]
-        # Existing language token IDs in codec vocab: zh=2064, en=2065, jp=2066, ko=2067,
-        # de=2068, fr=2069, ru=2070, pt=2071, es=2073, it=2074 (2072 is our Turkish slot)
-        existing_lang_ids = [2064, 2065, 2066, 2067, 2068, 2069, 2070, 2071, 2073, 2074]
+        # IDs verified from model config: talker_config.codec_language_id
+        existing_lang_ids = [2050, 2053, 2054, 2055, 2058, 2061, 2064, 2069, 2070, 2071]
         mean_lang_emb = emb_weight[existing_lang_ids].mean(dim=0)
         emb_weight[TURKISH_LANG_ID] = mean_lang_emb
         print(f"Initialized Turkish lang embedding (id={TURKISH_LANG_ID}) to mean of {len(existing_lang_ids)} language embeddings")
@@ -257,7 +258,7 @@ def main():
     scheduler = CosineAnnealingLR(optimizer, T_max=max(1, total_steps - args.warmup_steps))
 
     print(f"\nTraining: lr={args.lr:.1e}  max_steps={total_steps}"
-          f"  resume={'yes' if args.resume_from else 'no'}")
+          f"  grad_accum={args.grad_accum}  resume={'yes' if args.resume_from else 'no'}")
 
     global_step    = 0
     best_eval      = float("inf")
@@ -265,6 +266,7 @@ def main():
     prev_eval_loss = float("inf")
     log_loss       = 0.0
     done           = False
+    accum_step     = 0
 
     for epoch in range(args.epochs):
         if done:
@@ -277,13 +279,18 @@ def main():
             if codes.shape[0] < 2:
                 continue
 
-            optimizer.zero_grad()
             loss, l_main, l_sub = compute_loss(
                 sample["text"], codes, talker, processor, dev, dtype, args.sub_batch
             )
-            loss.backward()
+            (loss / args.grad_accum).backward()
+            accum_step += 1
+
+            if accum_step % args.grad_accum != 0:
+                continue
+
             torch.nn.utils.clip_grad_norm_(talker.parameters(), 1.0)
             optimizer.step()
+            optimizer.zero_grad()
 
             global_step += 1
             if global_step <= args.warmup_steps:

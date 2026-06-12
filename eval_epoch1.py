@@ -47,6 +47,7 @@ def synthesize(tts, text, output_path):
             input_ids=input_ids,
             languages=["turkish"],
             non_streaming_mode=True,
+            max_new_tokens=600,  # 48s max at 12.5Hz
         )
 
     speech_tok = tts.model.speech_tokenizer.model
@@ -54,7 +55,7 @@ def synthesize(tts, text, output_path):
     with torch.inference_mode():
         wav = speech_tok.decode(codes_tensor)
 
-    wav_np = wav.squeeze().cpu().float().numpy()
+    wav_np = wav.audio_values[0].cpu().float().numpy()
     sf.write(output_path, wav_np, 24000)
     duration = len(wav_np) / 24000
     print(f"  [{duration:.1f}s] → {output_path}")

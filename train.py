@@ -209,7 +209,7 @@ def main():
     parser.add_argument("--train_code_predictor_only", action="store_true",
                         help="Freeze ALL talker params except code_predictor (isolation test)")
     parser.add_argument("--save_at_steps", type=str, default="",
-                        help="Comma-separated step numbers to save snapshot checkpoints, e.g. '1000,2000,3000'")
+                        help="Save snapshot checkpoints at these steps, e.g. '1000,1500,2000'")
     parser.add_argument("--max_t",         type=int,   default=150,
                         help="Max codec frames (~12s at 12.5Hz)")
     parser.add_argument("--lora_rank",     type=int,   default=64)
@@ -346,6 +346,11 @@ def main():
           f"  grad_accum={args.grad_accum}  freeze_lora={args.freeze_lora}"
           f"  resume={'yes' if args.resume_from else 'no'}")
 
+    save_at = set(int(s.strip()) for s in args.save_at_steps.split(",") if s.strip()) \
+              if args.save_at_steps else set()
+    if save_at:
+        print(f"  Step snapshots will be saved at: {sorted(save_at)}")
+
     global_step    = 0
     best_eval      = float("inf")
     eval_rises     = 0
@@ -433,6 +438,11 @@ def main():
                 print(f"\n  --- Generating samples at step {global_step} ---")
                 generate_sample(tts_wrapper, global_step, samples_dir)
                 talker.train()
+
+            if global_step in save_at:
+                snap = os.path.join(args.output_dir, f"step_{global_step:06d}")
+                save_checkpoint(talker, snap)
+                print(f"  Saved snapshot → {snap}")
 
             if done or (args.max_steps > 0 and global_step >= args.max_steps):
                 done = True

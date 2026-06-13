@@ -291,7 +291,36 @@ python3 train.py \
 | No perceptual difference | Attention+MLP LoRA insufficient; base model limit reached |
 | Degraded | run_b1/best stays final |
 
-**Status:** Running (PID 631534). Results TBD — will update after sample evaluation.
+**Note on `--max_steps`:** First launch forgot `--max_steps`, defaulted to 1000. Ran only 1000 steps (6.5 min). Same bug as epoch 2 attempt 1 — always set `--max_steps` explicitly.
+
+**Step 1000 metrics (from the short run):**
+
+| Step | eval loss | sub loss |
+|------|-----------|----------|
+| 100  | 7.782     | ~9.8     |
+| 500  | 7.501     | ~10.4    |
+| 1000 | **7.062** | ~9.0     |
+
+Eval loss dropped 0.72 in just 1000 steps — steeper than epoch 1 at the same point. Attention+MLP LoRA is learning faster (more params touching phoneme/prosody layers).
+
+**Step 1000 sample verdict:** TBD — downloaded to `eval_output/exp_c/`. Listen before deciding to continue.
+
+### Experiment C Continuation
+
+```bash
+python3 train.py \
+    --model_dir  /home/hcfk/models/Qwen3-TTS-0.6B-Base \
+    --data_dir   /home/hcfk/datasets/issai_tokens \
+    --output_dir /home/hcfk/checkpoints/exp_c_continue \
+    --resume_from /home/hcfk/checkpoints/exp_c/final \
+    --lr 5e-7 --cp_lr 0 \
+    --max_steps 10000 --sample_every 1000 \
+    --scheduler constant --warmup_steps 0 --grad_accum 4
+```
+
+Monitor at every 1000 steps. Compare each sample against run_b1/best. Stop immediately if noise or metallic artefacts appear.
+
+**Status:** Running (PID 642277). Results TBD.
 
 ---
 

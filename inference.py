@@ -9,6 +9,7 @@ Usage:
         --output      output.wav
 """
 import argparse
+import re
 import numpy as np
 import soundfile as sf
 import torch
@@ -16,6 +17,35 @@ from peft import PeftModel
 from qwen_tts import Qwen3TTSModel
 
 TURKISH_LANG_ID = 2072
+
+_ONES = ["", "bir", "iki", "üç", "dört", "beş", "altı", "yedi", "sekiz", "dokuz"]
+_TENS = ["", "on", "yirmi", "otuz", "kırk", "elli", "altmış", "yetmiş", "seksen", "doksan"]
+
+def _int_to_tr(n: int) -> str:
+    if n < 0:
+        return "eksi " + _int_to_tr(-n)
+    if n == 0:
+        return "sıfır"
+    if n < 10:
+        return _ONES[n]
+    if n < 100:
+        return (_TENS[n // 10] + (" " + _ONES[n % 10] if n % 10 else "")).strip()
+    if n < 1000:
+        h = ("bir yüz" if n // 100 == 1 else _ONES[n // 100] + " yüz")
+        return (h + (" " + _int_to_tr(n % 100) if n % 100 else "")).strip()
+    if n < 1_000_000:
+        t = ("bin" if n // 1000 == 1 else _int_to_tr(n // 1000) + " bin")
+        return (t + (" " + _int_to_tr(n % 1000) if n % 1000 else "")).strip()
+    if n < 1_000_000_000:
+        return (_int_to_tr(n // 1_000_000) + " milyon" +
+                (" " + _int_to_tr(n % 1_000_000) if n % 1_000_000 else "")).strip()
+    return str(n)
+
+def normalize_numbers(text: str) -> str:
+    """Replace digit sequences with Turkish words."""
+    def replace(m):
+        return _int_to_tr(int(m.group()))
+    return re.sub(r'\d+', replace, text)
 
 
 def load_model(model_dir: str, adapter_dir: str):
@@ -38,6 +68,7 @@ def generate(tts_wrapper, text: str, output_path: str):
         tts_wrapper.model.supported_languages
     ) + ["turkish"]
 
+    text = normalize_numbers(text)
     print(f"Generating speech for: {text!r}")
     input_ids = [tts_wrapper.processor(
         text=f"<|im_start|>assistant\n{text}<|im_end|>\n<|im_start|>assistant\n",

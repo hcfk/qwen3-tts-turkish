@@ -26,6 +26,8 @@ from qwen_tts import Qwen3TTSModel
 TTS_BOS_TID     = 151672
 TTS_EOS_TID     = 151673
 TTS_PAD_TID     = 151671
+# Codec constants below are 0.6B defaults. For other models, pass --codec_* CLI args
+# or they will be auto-detected from model config.json where possible.
 CODEC_THINK     = 2154
 CODEC_THINK_BOS = 2156
 CODEC_THINK_EOS = 2157
@@ -33,6 +35,7 @@ CODEC_PAD       = 2148
 CODEC_BOS       = 2149
 CODEC_EOS       = 2150
 TURKISH_LANG_ID = 2072
+EXISTING_LANG_IDS = [2050, 2053, 2054, 2055, 2058, 2061, 2064, 2069, 2070, 2071]
 
 SAMPLE_SENTENCES = [
     "Bugün hava çok güzel.",
@@ -182,6 +185,44 @@ def generate_sample(tts_wrapper, step, output_dir):
         print(f"  [sample] {text!r} → {len(wav_np)/24000:.1f}s → {out}")
 
 
+def resolve_model_constants(model_dir, args):
+    """Read codec/language constants from model config.json; CLI args override auto-detected values."""
+    global TURKISH_LANG_ID, EXISTING_LANG_IDS
+    global CODEC_PAD, CODEC_BOS, CODEC_EOS, CODEC_THINK, CODEC_THINK_BOS, CODEC_THINK_EOS
+
+    cfg_path = os.path.join(model_dir, "config.json")
+    talker_cfg = {}
+    if os.path.exists(cfg_path):
+        with open(cfg_path) as f:
+            talker_cfg = json.load(f).get("talker_config", {})
+
+    lang_ids = talker_cfg.get("codec_language_id", {})
+    existing = sorted(v for k, v in lang_ids.items() if k != "turkish")
+
+    if lang_ids:
+        EXISTING_LANG_IDS = existing
+    if args.turkish_lang_id is not None:
+        TURKISH_LANG_ID = args.turkish_lang_id
+    elif "turkish" in lang_ids:
+        TURKISH_LANG_ID = lang_ids["turkish"]
+    elif existing:
+        TURKISH_LANG_ID = max(existing) + 1
+
+    def pick(cli, cfg_key, default):
+        return cli if cli is not None else talker_cfg.get(cfg_key, default)
+
+    CODEC_PAD       = pick(args.codec_pad,       "codec_pad_token_id",       CODEC_PAD)
+    CODEC_BOS       = pick(args.codec_bos,       "codec_bos_token_id",       CODEC_BOS)
+    CODEC_EOS       = pick(args.codec_eos,       "codec_eos_token_id",       CODEC_EOS)
+    CODEC_THINK     = pick(args.codec_think,     "codec_think_token_id",     CODEC_THINK)
+    CODEC_THINK_BOS = pick(args.codec_think_bos, "codec_think_bos_token_id", CODEC_THINK_BOS)
+    CODEC_THINK_EOS = pick(args.codec_think_eos, "codec_think_eos_token_id", CODEC_THINK_EOS)
+
+    print(f"[constants] TURKISH_LANG_ID={TURKISH_LANG_ID}  EXISTING_LANG_IDS={EXISTING_LANG_IDS}")
+    print(f"[constants] CODEC_PAD={CODEC_PAD}  CODEC_BOS={CODEC_BOS}  CODEC_EOS={CODEC_EOS}")
+    print(f"[constants] CODEC_THINK={CODEC_THINK}  CODEC_THINK_BOS={CODEC_THINK_BOS}  CODEC_THINK_EOS={CODEC_THINK_EOS}")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_dir",    required=True)
@@ -226,7 +267,18 @@ def main():
     parser.add_argument("--sub_batch",     type=int,   default=256)
     parser.add_argument("--grad_accum",    type=int,   default=4,
                         help="Gradient accumulation steps (effective batch size = grad_accum)")
+    # Codec/language constant overrides — auto-detected from config.json when not set.
+    # Required when training on a model with a different codec than 0.6B-Base.
+    parser.add_argument("--turkish_lang_id",  type=int, default=None)
+    parser.add_argument("--codec_pad",        type=int, default=None)
+    parser.add_argument("--codec_bos",        type=int, default=None)
+    parser.add_argument("--codec_eos",        type=int, default=None)
+    parser.add_argument("--codec_think",      type=int, default=None)
+    parser.add_argument("--codec_think_bos",  type=int, default=None)
+    parser.add_argument("--codec_think_eos",  type=int, default=None)
     args = parser.parse_args()
+
+    resolve_model_constants(args.model_dir, args)
 
     os.makedirs(args.output_dir, exist_ok=True)
     samples_dir = os.path.join(args.output_dir, "samples")
@@ -251,11 +303,9 @@ def main():
     # Successful community fine-tunes (Hindi, Arabic) all do this instead of leaving it random.
     with torch.no_grad():
         emb_weight = talker.get_input_embeddings().weight  # [vocab_size, H]
-        # IDs verified from model config: talker_config.codec_language_id
-        existing_lang_ids = [2050, 2053, 2054, 2055, 2058, 2061, 2064, 2069, 2070, 2071]
-        mean_lang_emb = emb_weight[existing_lang_ids].mean(dim=0)
+        mean_lang_emb = emb_weight[EXISTING_LANG_IDS].mean(dim=0)
         emb_weight[TURKISH_LANG_ID] = mean_lang_emb
-        print(f"Initialized Turkish lang embedding (id={TURKISH_LANG_ID}) to mean of {len(existing_lang_ids)} language embeddings")
+        print(f"Initialized Turkish lang embedding (id={TURKISH_LANG_ID}) to mean of {len(EXISTING_LANG_IDS)} language embeddings")
 
     if args.partial_ft_layers > 0:
         # Partial full fine-tune — skip LoRA entirely

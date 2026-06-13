@@ -1,0 +1,47 @@
+# Experiment F — Qwen3-TTS-1.7B Stage 2
+# Resume from best Stage 1 checkpoint (exp_f_1.7b_stage1/step_XXXXXX).
+# Freeze MLP LoRA, continue attention-only at ultra-low LR.
+# FILL IN resume_from after Stage 1 perceptual evaluation.
+#
+# Run command:
+# Add same --codec_* and --turkish_lang_id flags as Stage 1 if constants differ from 0.6B.
+#
+#   python3 /home/hcfk/train.py \
+#     --model_dir      /home/hcfk/models/Qwen3-TTS-1.7B-Base \
+#     --data_dir       /home/hcfk/datasets/issai_tokens \
+#     --output_dir     /home/hcfk/checkpoints/exp_f_1.7b_stage2 \
+#     --resume_from    /home/hcfk/checkpoints/exp_f_1.7b_stage1/step_001000 \
+#     --freeze_mlp_lora \
+#     --lr 1e-7 --cp_lr 0 \
+#     --scheduler constant --warmup_steps 0 \
+#     --max_steps 2000 --sample_every 500 \
+#     --save_at_steps "500,1000,1500,2000"
+
+experiment: exp_f_1.7b_stage2
+base_model: Qwen/Qwen3-TTS-12Hz-1.7B-Base
+model_dir: /home/hcfk/models/Qwen3-TTS-1.7B-Base
+resume_from: /home/hcfk/checkpoints/exp_f_1.7b_stage1/step_001000  # UPDATE after Stage 1
+output_dir: /home/hcfk/checkpoints/exp_f_1.7b_stage2
+
+training:
+  freeze_mlp_lora: true
+  lr: 1e-7
+  cp_lr: 0
+  scheduler: constant
+  warmup_steps: 0
+  max_steps: 2000
+  grad_accum: 4
+  sample_every: 500
+  save_at_steps: "500,1000,1500,2000"
+
+rationale: >
+  Same as 0.6B Stage 2 (exp_d/exp_d2): freeze MLP LoRA to lock phoneme alignment,
+  refine with attention-only at lr=1e-7. Peak on 0.6B was step 2000.
+  Snapshot every 500 steps to capture perceptual peak (eval loss is not reliable for selection).
+
+decision_rules:
+  step_500: "Compare to Stage 1 step 1000. Any improvement?"
+  step_1000: "Compare to 0.6B best_perceptual. C→K reduced?"
+  step_1500: "Better than step 1000? If degrading → select 1000 as best."
+  step_2000: "Final check. Promote best step to best_perceptual_1.7b."
+  if_degrading: "Stop early and take the last non-degraded snapshot."

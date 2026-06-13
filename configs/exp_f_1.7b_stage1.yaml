@@ -1,0 +1,53 @@
+# Experiment F — Qwen3-TTS-1.7B Stage 1
+# Mirrors the 0.6B exp_c strategy that produced the best early checkpoint.
+# IMPORTANT: Verify codec constants from check_1.7b_config.py before launching.
+#
+# Run command:
+# IMPORTANT: Run check_1.7b_config.py FIRST to confirm codec constants.
+# If constants differ from 0.6B defaults, add --codec_eos, --codec_pad, --codec_bos,
+# --codec_think, --codec_think_bos, --codec_think_eos, --turkish_lang_id flags.
+# Also verify dataset compatibility: issai_tokens must match the 1.7B codec.
+#
+#   python3 /home/hcfk/train.py \
+#     --model_dir  /home/hcfk/models/Qwen3-TTS-1.7B-Base \
+#     --data_dir   /home/hcfk/datasets/issai_tokens \
+#     --output_dir /home/hcfk/checkpoints/exp_f_1.7b_stage1 \
+#     --lora_rank 16 --lora_alpha 32 \
+#     --lora_targets q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj \
+#     --lr 5e-7 --cp_lr 0 \
+#     --scheduler constant --warmup_steps 100 \
+#     --max_steps 1000 --sample_every 200 \
+#     --save_at_steps "500,800,1000" \
+#     --grad_accum 4
+
+experiment: exp_f_1.7b_stage1
+base_model: Qwen/Qwen3-TTS-12Hz-1.7B-Base
+model_dir: /home/hcfk/models/Qwen3-TTS-1.7B-Base
+data_dir: /home/hcfk/datasets/issai_tokens
+output_dir: /home/hcfk/checkpoints/exp_f_1.7b_stage1
+
+lora:
+  r: 16
+  alpha: 32
+  target_modules: all  # attention + MLP (same as exp_c)
+
+training:
+  lr: 5e-7
+  cp_lr: 0
+  scheduler: constant
+  warmup_steps: 100
+  max_steps: 1000
+  grad_accum: 4
+  sample_every: 200
+  save_at_steps: "500,800,1000"
+
+rationale: >
+  Mirror of exp_c on 0.6B: attention+MLP LoRA rank 16, ultra-low LR, CP frozen.
+  Early stopping at 1K — perceptual peak on 0.6B was exactly step 1K before degradation.
+  save_at_steps at 500/800/1000 to catch the peak without relying on eval loss.
+
+decision_rules:
+  step_200: "Is Turkish intelligible? If metallic/noise → reduce LR or stop."
+  step_500: "Is accent less than 0.6B best_perceptual? If yes → continue."
+  step_1000: "Perceptual check. If accent clearly less → proceed to Stage 2."
+  if_no_improvement: "Do NOT extend Stage 1. Investigate LR, LoRA targets, or codec constants."

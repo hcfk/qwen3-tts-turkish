@@ -116,6 +116,25 @@ Passing Turkish text inline via PuTTY plink (`--text "Türkçe"`) silently corru
 
 ---
 
+## F10 — 1.7B learns significantly faster than 0.6B at the same LR
+
+**From exp_f Stage 1 (2026-06-14):**
+
+Stage 1 on 1.7B with identical settings to 0.6B exp_c (attention+MLP LoRA rank 16, lr=5e-7):
+
+| Model | Eval loss drop over 1000 steps | Rate |
+|-------|-------------------------------|------|
+| 0.6B exp_c | 7.79 → 7.51 (~0.28) | 1× |
+| 1.7B exp_f | 7.79 → 7.14 (0.65) | **2.3×** |
+
+The 1.7B model's higher parameter count allows much faster absorption of the Turkish phoneme distribution. Sub loss also drops further (to 9.4–9.6 vs 0.6B plateau of ~10.1).
+
+Importantly, both models share the **same speech tokenizer** (identical MD5) and the same codec constants — so the ISSAI tokens prepared for 0.6B are directly reusable for 1.7B without re-tokenization.
+
+**Implication:** 1.7B Stage 2 likely has more headroom to reduce accent and C→K than 0.6B ever did.
+
+---
+
 ## Summary Table
 
 | Finding | Implication |
@@ -128,4 +147,5 @@ Passing Turkish text inline via PuTTY plink (`--text "Türkçe"`) silently corru
 | F6: MLP LoRA only helps at ≤1K steps | Early stopping mandatory; later steps degrade audio |
 | F7: SSH breaks Turkish chars | Use pscp + hardcoded test script |
 | F8: Staged LoRA works; eval loss ≠ perceptual peak | Always snapshot at candidate steps |
-| F9: 0.6B ceiling confirmed — partial FT also failed | Next direction: Qwen3-TTS-1.7B or Turkish-native base model |
+| F9: 0.6B ceiling confirmed — partial FT also failed | Moved to 1.7B experiment |
+| F10: 1.7B learns 2.3× faster than 0.6B at same LR | 1.7B Stage 2 has more headroom for accent reduction |

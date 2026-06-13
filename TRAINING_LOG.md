@@ -581,6 +581,63 @@ Server: `best_perceptual_expc_backup` = old exp_c step 1000; `best_perceptual` =
 
 ---
 
+## Experiment F — Qwen3-TTS-1.7B Stage 1
+
+**Model:** `Qwen/Qwen3-TTS-12Hz-1.7B-Base`
+**Pre-training check (2026-06-14):** Speech tokenizer confirmed identical to 0.6B (same MD5). All codec constants (CODEC_PAD/BOS/EOS/THINK, TURKISH_LANG_ID) identical. vocab_size=3072, num_code_groups=16 — ISSAI tokens fully compatible, no re-tokenization needed.
+
+**Command:**
+```bash
+python3 /home/hcfk/train.py \
+  --model_dir /home/hcfk/models/Qwen3-TTS-1.7B-Base \
+  --data_dir  /home/hcfk/datasets/issai_tokens \
+  --output_dir /home/hcfk/checkpoints/exp_f_1.7b_stage1 \
+  --lora_rank 16 --lora_alpha 32 \
+  --lora_targets q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj \
+  --lr 5e-7 --cp_lr 0 --scheduler constant --warmup_steps 100 \
+  --max_steps 1000 --sample_every 200 --save_at_steps "500,800,1000" --grad_accum 4
+```
+
+**Result — completed in 8.6 minutes:**
+
+| Step | Eval loss |
+|------|-----------|
+| 100 | 7.7939 |
+| 200 | 7.7592 |
+| 300 | 7.7045 |
+| 400 | 7.6324 |
+| 900 | 7.1965 |
+| 1000 | **7.1400** |
+
+Eval loss drop: 7.79 → 7.14 = **0.65 over 1000 steps**. Compare to 0.6B exp_c at same LR: dropped ~0.28 — 1.7B learns more than 2× faster. Sub loss also dropping (10.3 → 9.5 range). s2 duration shortened from 9.3s (step 200) to 3.5s (step 1000), indicating faster EOS convergence.
+
+**Perceptual:** User confirmed "çok iyi gelişiyor" — quality clearly improving. Proceed to Stage 2.
+
+**Snapshot saved:** `/home/hcfk/checkpoints/exp_f_1.7b_stage1/step_001000`
+
+---
+
+## Experiment F — Qwen3-TTS-1.7B Stage 2
+
+**Resume from:** `exp_f_1.7b_stage1/step_001000`
+**Strategy:** Freeze MLP LoRA, attention-only at lr=1e-7 (same as 0.6B Stage 2)
+
+**Command:**
+```bash
+python3 /home/hcfk/train.py \
+  --model_dir /home/hcfk/models/Qwen3-TTS-1.7B-Base \
+  --data_dir  /home/hcfk/datasets/issai_tokens \
+  --output_dir /home/hcfk/checkpoints/exp_f_1.7b_stage2 \
+  --resume_from /home/hcfk/checkpoints/exp_f_1.7b_stage1/step_001000 \
+  --freeze_mlp_lora --lr 1e-7 --cp_lr 0 \
+  --scheduler constant --warmup_steps 0 \
+  --max_steps 2000 --sample_every 500 --save_at_steps "500,1000,1500,2000" --grad_accum 4
+```
+
+**Status:** Running (launched 2026-06-14). Results to be added after completion.
+
+---
+
 ## Lessons Learned
 
 | # | Lesson |

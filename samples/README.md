@@ -68,6 +68,12 @@ Full 5-sentence `run_inference_test.py` evaluation from Stage 2 step 2000.
 Number normalizer active. Best perceptual result across all experiments.
 **This is the final best_perceptual checkpoint for Qwen3-TTS-0.6B.**
 
+## 12 — Exp F 1.7B Stage 1 (steps 200–1000)
+
+`Qwen3-TTS-12Hz-1.7B-Base`, attention+MLP LoRA rank 16, lr=5e-7, max_steps=1000.
+Samples at steps 200/400/600/800/1000. Eval loss 7.79→7.14 — 2.3× faster than 0.6B.
+Stage 2 now running. Compare step 1000 s2 to 0.6B best_perceptual (sample 10) for accent reduction.
+
 ## 11 — Exp E Partial FT (last 2 layers)
 
 Partial full fine-tune of last 2 transformer layers (no LoRA), lr=1e-6, max_steps=500.

@@ -152,6 +152,68 @@ optimizer = AdamW([
 
 ---
 
+## LR / Scheduler Diagnostic Runs
+
+After the dual-LR fix, a series of short tests were run to find the right CP LR. All used `--train_code_predictor_only` (LoRA frozen) unless noted.
+
+| Run | lr_lora | cp_lr | scheduler | steps | sub result | verdict |
+|-----|---------|-------|-----------|-------|------------|---------|
+| overfit_test | 5e-6 | 1e-5 | cosine | 500 | 7.65 | barely moved |
+| overfit_test2 | 5e-6 | 1e-5 | cosine | 5000 | 7.58 | cosine killed CP LR by mid-run |
+| test_constant_lr | 1e-6 | 2e-5 | constant | 2000 | 7.42 | slow improvement, no breakthrough |
+| cp_only_test | 0 | 5e-5 | constant | 2000 | **6.45** @ step 1900, then 7.51 | learns but unstable at 5e-5 |
+| cp_stage1 | 0 | 1e-5 | constant | 2000 | 7.5x | 1e-5 too slow, no breakthrough |
+
+**Key finding: sub loss and sample quality are NOT directly correlated.**
+
+`issai_run1/final` produced good audio with `sub ≈ 7.7` throughout. The CP-only test that got sub to 6.45 used frozen LoRA — meaning those hidden states had never been adapted for Turkish. Sub can drop without producing better Turkish TTS.
+
+This invalidates the assumption that "sub must reach 6.x for good audio."
+
+---
+
+## Strategic Pivot — B Path: Sample-Preserving Continuation
+
+**Decision:** Stop chasing sub loss. Focus on why `issai_run1/final` worked.
+
+Most likely causes of epoch 2 degradation:
+1. LoRA over-learned, degraded base speech prior
+2. Same small dataset → overfit on 2nd pass
+3. EOS/duration behavior broke with more training
+4. LR still too high for epoch 2 continuation
+
+**Strategy:** Ultra-low LR continuation from `issai_run1/final`. Goal is accent reduction without breaking audio quality.
+
+### Run B1 — LoRA only, CP frozen
+
+```bash
+python3 train.py \
+    --resume_from /home/hcfk/checkpoints/issai_run1/final \
+    --lr 1e-7 --cp_lr 0 \
+    --max_steps 500 --sample_every 100 \
+    --scheduler constant --warmup_steps 20 \
+    --grad_accum 4
+```
+
+Stop at first sign of noise. Listen to samples at every 100-step checkpoint.
+
+### Run B2 (if B1 stable) — tiny joint update
+
+```bash
+--lr 2e-7 --cp_lr 5e-6 --max_steps 500
+```
+
+### Decision rule
+
+| B1 sample result | Action |
+|-----------------|--------|
+| Same or better | Continue to B2 |
+| Worse / noisy | `issai_run1/final` is optimal — stop training |
+
+**`issai_run1/final` samples archived at:** `/home/hcfk/eval_archive_issai_run1_final/`
+
+---
+
 ## Final Model
 
 **`issai_run1/best`** is the best checkpoint. It has the lowest eval loss from epoch 1 and produced clean, intelligible Turkish TTS output.

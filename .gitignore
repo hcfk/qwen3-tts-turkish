@@ -36,8 +36,9 @@ eval_output/
 !samples/
 !samples/**
 
-# Scripts with credentials
+# Scripts with credentials — do not commit
 push_to_hf.py
+upload_readme.py
 
 # Claude Code
 CLAUDE.md

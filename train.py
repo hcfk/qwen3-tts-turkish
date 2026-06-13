@@ -18,7 +18,7 @@ import numpy as np
 import soundfile as sf
 import torch
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, LambdaLR
 from torch.utils.data import Dataset, DataLoader
 from peft import LoraConfig, get_peft_model, PeftModel, TaskType
 from qwen_tts import Qwen3TTSModel
@@ -185,6 +185,10 @@ def main():
     parser.add_argument("--lr",            type=float, default=5e-6)
     parser.add_argument("--cp_lr",         type=float, default=1e-5,
                         help="Learning rate for code_predictor (higher than LoRA lr)")
+    parser.add_argument("--scheduler",     default="cosine", choices=["cosine", "constant"],
+                        help="cosine: decay to 0; constant: hold LR after warmup")
+    parser.add_argument("--freeze_lora",   action="store_true",
+                        help="Freeze LoRA/talker.model, train only code_predictor")
     parser.add_argument("--max_t",         type=int,   default=150,
                         help="Max codec frames (~12s at 12.5Hz)")
     parser.add_argument("--lora_rank",     type=int,   default=64)
@@ -254,6 +258,11 @@ def main():
 
     total_steps = args.max_steps if args.max_steps > 0 else len(train_dl) * args.epochs
 
+    if args.freeze_lora:
+        for p in talker.model.parameters():
+            p.requires_grad = False
+        print("LoRA/talker.model frozen — training code_predictor only")
+
     lora_params = [p for n, p in talker.named_parameters()
                    if p.requires_grad and "code_predictor" not in n]
     cp_params   = [p for p in talker.code_predictor.parameters() if p.requires_grad]
@@ -261,10 +270,17 @@ def main():
         {"params": lora_params, "lr": args.lr,    "initial_lr": args.lr},
         {"params": cp_params,   "lr": args.cp_lr, "initial_lr": args.cp_lr},
     ], weight_decay=0.01)
-    scheduler = CosineAnnealingLR(optimizer, T_max=max(1, total_steps - args.warmup_steps))
 
-    print(f"\nTraining: lr_lora={args.lr:.1e}  lr_cp={args.cp_lr:.1e}  max_steps={total_steps}"
-          f"  grad_accum={args.grad_accum}  resume={'yes' if args.resume_from else 'no'}")
+    decay_steps = max(1, total_steps - args.warmup_steps)
+    if args.scheduler == "cosine":
+        scheduler = CosineAnnealingLR(optimizer, T_max=decay_steps)
+    else:  # constant — hold LR flat after warmup
+        scheduler = LambdaLR(optimizer, lr_lambda=lambda _: 1.0)
+
+    print(f"\nTraining: lr_lora={args.lr:.1e}  lr_cp={args.cp_lr:.1e}  "
+          f"scheduler={args.scheduler}  max_steps={total_steps}"
+          f"  grad_accum={args.grad_accum}  freeze_lora={args.freeze_lora}"
+          f"  resume={'yes' if args.resume_from else 'no'}")
 
     global_step    = 0
     best_eval      = float("inf")

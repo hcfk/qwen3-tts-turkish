@@ -68,6 +68,37 @@ Experiment C (attention + MLP LoRA, rank 16, lr = 5e-7, cp frozen, fresh base mo
 
 ---
 
+## F8 — Stage 2 (frozen MLP LoRA + attention-only refinement) improves quality further
+
+Experiment D (Stage 2) started from exp_c step 1000 (`best_perceptual`), froze all MLP LoRA weights, and continued training only the attention LoRA at lr=1e-7. Result:
+
+- Stage 2 step 1000 already sounded better than exp_c step 2000
+- Stage 2 step 2000 was the perceptual peak — better than exp_c step 1000 (`best_perceptual`)
+- Stage 2 step 3000–5000: quality held but did not improve further
+
+Eval loss decreased monotonically from 7.059 (step 100) to 6.831 (step 5000), confirming that eval loss alone is not sufficient to select the best checkpoint.
+
+**Conclusion:** The staged approach works. MLP LoRA gave the initial phoneme/prosody shift; attention-only refinement on top improved accent further without degrading acoustic texture.
+
+**Critical operational lesson:** When eval loss is monotonically decreasing, the `best` checkpoint (saved by eval loss) equals the final step — not the perceptual optimum. Always use `--save_at_steps` to snapshot candidate checkpoints for perceptual evaluation.
+
+**Stage 2 checkpoint status:** Step 2000 was identified as perceptual best but the checkpoint was overwritten by continued training. Step 2000 weights are not recoverable from this run.
+
+---
+
+## F9 — LoRA surface adaptation may be insufficient for full accent elimination
+
+After 4 experiments (exp_a, exp_c, exp_d) across attention-only, attention+MLP, and staged LoRA strategies, a persistent foreign accent and C→K phoneme substitution remain. Progress is real but the ceiling is becoming visible.
+
+Hypothesis: Turkish phoneme-to-codec mapping requires deeper weight changes than LoRA rank-16/64 can express. LoRA modifies a low-rank projection of the weight matrices; the residual accent may live in the null space of the LoRA update.
+
+Candidate next approaches:
+- **Partial full fine-tune**: last 2–4 transformer layers fully trainable, base weights modified directly
+- **Larger base model**: Qwen3-TTS-1.7B or 3B may have more capacity for the phoneme shift
+- **Different base model**: a TTS base with native Turkish or broader multilingual phoneme coverage
+
+---
+
 ## F7 — SSH encoding corrupts Turkish characters; use pscp for test scripts
 
 Passing Turkish text inline via PuTTY plink (`--text "Türkçe"`) silently corrupts non-ASCII characters to `?`. The model receives broken input and produces wrong phonemes.
@@ -87,3 +118,5 @@ Passing Turkish text inline via PuTTY plink (`--text "Türkçe"`) silently corru
 | F5: Attention-only LoRA hits ceiling | Rank 64 attn-only cannot reach native accent |
 | F6: MLP LoRA only helps at ≤1K steps | Early stopping mandatory; later steps degrade audio |
 | F7: SSH breaks Turkish chars | Use pscp + hardcoded test script |
+| F8: Staged LoRA works; eval loss ≠ perceptual peak | Always snapshot at candidate steps |
+| F9: LoRA ceiling may require partial full fine-tune or larger model | Next experiments: exp_e partial FT or scale up |

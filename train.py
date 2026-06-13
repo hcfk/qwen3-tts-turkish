@@ -36,7 +36,7 @@ TURKISH_LANG_ID = 2072
 
 SAMPLE_SENTENCES = [
     "Bugün hava çok güzel.",
-    "Türkiye Cumhuriyeti 1923 yılında kuruldu.",
+    "Türkiye Cumhuriyeti bin dokuz yüz yirmi üç yılında kuruldu.",
 ]
 
 
@@ -149,9 +149,13 @@ def compute_loss(text, codec_codes, talker, processor, dev, dtype, sub_batch):
     return loss_main + 0.5 * (total_sub / T), loss_main, total_sub / T
 
 
-def save_checkpoint(talker, ckpt_dir):
+def save_checkpoint(talker, ckpt_dir, partial_ft=False):
     os.makedirs(ckpt_dir, exist_ok=True)
-    talker.model.save_pretrained(ckpt_dir)
+    if partial_ft:
+        trainable = {n: p.detach().cpu() for n, p in talker.named_parameters() if p.requires_grad}
+        torch.save(trainable, os.path.join(ckpt_dir, "partial_ft.pt"))
+    else:
+        talker.model.save_pretrained(ckpt_dir)
     torch.save(talker.code_predictor.state_dict(),
                os.path.join(ckpt_dir, "code_predictor.pt"))
 
@@ -199,8 +203,13 @@ def main():
     parser.add_argument("--freeze_mlp_lora", action="store_true",
                         help="Freeze MLP LoRA (gate/up/down_proj), keep attention LoRA trainable. "
                              "Use with --resume_from for Stage 2 training.")
+    parser.add_argument("--partial_ft_layers", type=int, default=0,
+                        help="Partial full fine-tune: freeze all base weights except last N transformer "
+                             "layers. Skips LoRA entirely. CP always frozen.")
     parser.add_argument("--train_code_predictor_only", action="store_true",
                         help="Freeze ALL talker params except code_predictor (isolation test)")
+    parser.add_argument("--save_at_steps", type=str, default="",
+                        help="Comma-separated step numbers to save snapshot checkpoints, e.g. '1000,2000,3000'")
     parser.add_argument("--max_t",         type=int,   default=150,
                         help="Max codec frames (~12s at 12.5Hz)")
     parser.add_argument("--lora_rank",     type=int,   default=64)

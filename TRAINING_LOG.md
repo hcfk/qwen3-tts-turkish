@@ -481,7 +481,38 @@ python3 /home/hcfk/QwenTR/train.py \
 | 3K | Still improving? | flat or degraded vs 2K |
 | 5K | Only if 3K trend positive | — |
 
-**Status:** Planned — pending run.
+**Status:** Completed.
+
+### Experiment D — Results
+
+Eval loss progression (monotonically decreasing throughout):
+
+| Step | Eval loss | Perceptual note |
+|------|-----------|----------------|
+| 100  | 7.059 | baseline |
+| 500  | 7.029 | |
+| 1000 | 6.995 | sample generated — better than exp_c step 2000 |
+| 2000 | **6.938** | **perceptual peak — best result of the run** |
+| 3000 | 6.895 | holding, no clear improvement |
+| 4000 | 6.860 | same |
+| 5000 | 6.831 | no improvement — training done |
+
+Total run time: 31.8 minutes.
+
+**Perceptual verdict:** Stage 2 step 2000 is the best checkpoint — better than `best_perceptual` (exp_c step 1000) and better than all previous runs. The staged approach worked: frozen MLP LoRA preserved the acoustic prior while attention refinement improved accent.
+
+**Problem:** Eval loss decreased monotonically, so the auto-saved `best` checkpoint = step 5000 (lowest eval loss, not best perceptual). Step 2000 weights were overwritten and are not recoverable from this run.
+
+**Root cause:** The training script saves `best` only when eval loss improves — which here was every 100-step eval. Need `--save_at_steps` for future runs.
+
+**Remaining issues (after Stage 2 step 2000):**
+- Foreign accent still present, reduced but not eliminated
+- Numbers read in non-Turkish phonemes (expected: SAMPLE_SENTENCES had "1923" as digits, not words — fixed in subsequent commit)
+- C→K substitution ("Cumhuriyeti" → "Kumhuriyeti") still partially present
+
+**Action required:** To recover step 2000, re-run Stage 2 with `max_steps=2000` and `--save_at_steps 1000,2000`. OR proceed to Experiment E (partial full fine-tune).
+
+**Checkpoint status:** `exp_d_stage2/best` = step 5000 (lowest eval loss). `exp_d_stage2/final` = step 5000. Step 2000 not saved.
 
 ---
 

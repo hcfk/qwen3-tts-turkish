@@ -9,7 +9,7 @@ import argparse
 import os
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
-from inference import load_model, generate
+from inference import load_model, generate, normalize_numbers
 
 MODEL_DIR = "/home/hcfk/models/Qwen3-TTS-0.6B-Base"
 
@@ -41,7 +41,7 @@ def main():
 
     for tag, text in SENTENCES:
         out = os.path.join(args.output_dir, f"{tag}.wav")
-        generate(tts, text, out)
+        generate(tts, normalize_numbers(text), out)
 
 if __name__ == "__main__":
     main()

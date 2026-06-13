@@ -30,12 +30,12 @@ The model can synthesize understandable Turkish speech, but it may retain a fore
 
 | Property | Value |
 |----------|-------|
-| Version | v0.1-experimental |
+| Version | v0.2-experimental |
 | Base model | Qwen/Qwen3-TTS-0.6B-Base |
 | Language target | Turkish (tr) |
 | Current quality | Understandable Turkish with a foreign accent |
 | Production-ready | No |
-| Primary checkpoint | `adapter/` (run_b1/best, selected by perceptual quality) |
+| Primary checkpoint | `adapter/` (exp_c step 1000 — attention+MLP LoRA, selected by perceptual quality) |
 
 ---
 
@@ -80,15 +80,17 @@ For a full inference example see the [GitHub repository](https://github.com/hcfk
 ## Training Method
 
 - **Fine-tuning:** LoRA (PEFT) on the talker backbone
-- **LoRA targets:** `q_proj, k_proj, v_proj, o_proj` (attention only)
-- **LoRA rank:** 64, alpha: 128
+- **LoRA targets:** `q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj` (attention + MLP)
+- **LoRA rank:** 16, alpha: 32
+- **Training steps:** 1000 (from base model) — early stopping is critical
 - **Code predictor:** Kept frozen throughout — see important finding below
+- **Number normalization:** Digits are automatically converted to Turkish words at inference time
 
 ---
 
 ## Important Finding
 
-> Lower sub loss did not necessarily correlate with better perceptual audio quality. Training the code predictor reduced sub loss in some experiments, but degraded acoustic quality. The current best checkpoints are selected by perceptual sample quality and EOS stability, not by sub loss alone.
+> Lower sub loss did not necessarily correlate with better perceptual audio quality. Training the code predictor reduced sub loss in some experiments, but degraded acoustic quality. Similarly, MLP LoRA produced better audio only at step 1000 — continuing to 2K-5K introduced metallic artifacts. The current best checkpoint is selected by perceptual sample quality, not by sub loss or validation loss alone.
 
 This is a non-obvious result: in experiments B2 and B3, sub loss reached below the random baseline (7.47 < log(2048) = 7.62), yet audio quality was perceptually worse. The selected checkpoint (run_b1) was chosen because it sounded better despite having a higher sub loss.
 
@@ -99,10 +101,11 @@ This is a non-obvious result: in experiments B2 and B3, sub loss reached below t
 | Experiment | Config | Perceptual Result |
 |-----------|--------|------------------|
 | Exp A — Epoch 1 | Attention LoRA rank 64, lr=5e-6, 45K steps | Understandable Turkish, foreign accent |
-| Exp B1 — B-path ✅ | LoRA-only lr=1e-7, CP frozen, 500 steps | More Turkish, current best checkpoint |
+| Exp B1 — B-path | LoRA-only lr=1e-7, CP frozen, 500 steps | More Turkish, good audio |
 | Exp B2 — Rejected | Joint CP training cp_lr=5e-6 | Degraded audio despite lower loss |
 | Exp B3 — Rejected | Joint CP training cp_lr=1e-5 | Best sub loss, worst audio |
-| Exp C — In progress | Attention+MLP LoRA rank 16, lr=5e-7 | Evaluation ongoing |
+| Exp C — step 1000 ✅ | Attention+MLP LoRA rank 16, lr=5e-7, **1K steps only** | Best result — current checkpoint |
+| Exp C — step 2K-5K ❌ | Same config, continued | Metallic artifacts, degraded quality |
 
 Full experiment log: [TRAINING_LOG.md](https://github.com/hcfk/qwen3-tts-turkish/blob/main/TRAINING_LOG.md)  
 Key findings: [FINDINGS.md](https://github.com/hcfk/qwen3-tts-turkish/blob/main/FINDINGS.md)

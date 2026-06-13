@@ -39,7 +39,14 @@ lr=3e-7, cp_lr=1e-5, 500 steps.
 Sub loss reached 7.47 (below random baseline) — best metric result.
 Worst perceptual result. Strong evidence against CP training.
 
-## 06 — Final (`best_perceptual` + silence trim)
+## 06 — Final (B1 `best_perceptual` + silence trim)
 
 `best_perceptual` checkpoint with trailing silence trimmed in inference.
 Two sentences: "Bugün hava çok güzel." and "Türkiye Cumhuriyeti 1923 yılında kuruldu."
+
+## 07 — Exp C Step 1000 — New `best_perceptual` ✅
+
+`exp_c/final`: fresh base model, attention+MLP LoRA rank 16, lr=5e-7, 1000 steps, cp_lr=0.
+Full 5-sentence standard test with automatic number normalization.
+Perceptually better than B1 (less foreign accent). Numbers correct (normalizer active).
+**This is the current best_perceptual checkpoint.**

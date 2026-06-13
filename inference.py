@@ -57,6 +57,12 @@ def generate(tts_wrapper, text: str, output_path: str):
     with torch.inference_mode():
         wav = speech_tok.decode(codes_tensor)
     wav_np = wav.audio_values[0].cpu().float().numpy()
+
+    # Trim trailing silence: keep 0.15s after last active sample
+    active = np.where(np.abs(wav_np) > 0.005)[0]
+    if len(active) > 0:
+        wav_np = wav_np[:active[-1] + int(0.15 * 24000)]
+
     sf.write(output_path, wav_np, 24000)
     print(f"Saved → {output_path}  ({len(wav_np)/24000:.2f}s)")
 

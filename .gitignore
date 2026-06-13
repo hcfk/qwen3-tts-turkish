@@ -31,6 +31,9 @@ checkpoints/
 *.log
 runs/
 
+# Claude Code
+CLAUDE.md
+
 # Editor
 .vscode/
 .idea/

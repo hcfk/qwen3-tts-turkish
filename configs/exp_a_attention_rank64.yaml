@@ -1,0 +1,35 @@
+# Experiment A — Epoch 1, Attention-only LoRA rank 64
+# Result: issai_run1/best — best baseline, foreign accent remains
+
+name: exp_a
+description: >
+  First full fine-tuning run. Attention-only LoRA on ISSAI Turkish corpus.
+  Established that Turkish TTS is achievable but accent remains.
+
+base_model: Qwen3-TTS-0.6B-Base
+resume_from: null
+
+lora:
+  targets: [q_proj, k_proj, v_proj, o_proj]
+  rank: 64
+  alpha: 128
+  dropout: 0.05
+
+training:
+  lr_lora: 5.0e-6
+  cp_lr: 0.0          # CP not in optimizer (single param group era)
+  scheduler: cosine
+  warmup_steps: 200
+  grad_accum: 4
+  epochs: 1
+  max_steps: null      # ran full dataset (~45K steps)
+  sample_every: 2000
+
+result:
+  checkpoint: issai_run1/best
+  eval_loss: ~5.4
+  sub_loss: ~7.7       # near random baseline throughout
+  steps: ~44780
+  duration_min: 280
+  perceptual: "Understandable Turkish, clear foreign accent"
+  status: accepted_as_baseline

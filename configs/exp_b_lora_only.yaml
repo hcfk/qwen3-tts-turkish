@@ -1,0 +1,55 @@
+# Experiment B — B-path: LoRA-only ultra-low LR continuation
+# Result: best_perceptual — current production checkpoint
+
+name: exp_b
+description: >
+  Ultra-low LR LoRA-only continuation from issai_run1/final.
+  CP frozen throughout. Joint CP training (B2, B3) was attempted
+  but degraded audio despite lower sub loss — both rejected.
+  best_perceptual = run_b1/best.
+
+base_model: Qwen3-TTS-0.6B-Base
+resume_from: issai_run1/final
+
+lora:
+  targets: [q_proj, k_proj, v_proj, o_proj]
+  rank: 64            # inherited from exp_a
+  alpha: 128
+
+# Run B1 — accepted
+b1:
+  lr_lora: 1.0e-7
+  cp_lr: 0.0          # CP frozen
+  scheduler: constant
+  warmup_steps: 20
+  grad_accum: 4
+  max_steps: 500
+  sample_every: 100
+  eval_loss_final: 6.397
+  perceptual: "More Turkish than exp_a, slight trailing silence"
+  status: accepted → best_perceptual
+
+# Run B2 — rejected
+b2:
+  lr_lora: 2.0e-7
+  cp_lr: 5.0e-6
+  max_steps: 500
+  eval_loss_final: 5.692
+  sub_loss_final: 7.65
+  perceptual: "Degraded — CP training broke acoustic quality"
+  status: rejected
+
+# Run B3 — rejected
+b3:
+  lr_lora: 3.0e-7
+  cp_lr: 1.0e-5
+  max_steps: 500
+  eval_loss_final: 5.642
+  sub_loss_final: 7.47   # below random baseline — but worst audio
+  perceptual: "Worse than B1 despite best sub loss"
+  status: rejected
+
+finding: >
+  CP training reduces sub loss but degrades acoustic quality.
+  Sub loss is NOT a reliable perceptual quality metric.
+  Keep cp_lr=0 in all future runs.

@@ -1,0 +1,55 @@
+# Experiment C — Fresh start, Attention + MLP LoRA, rank 16
+# Status: In progress
+
+name: exp_c
+description: >
+  Fresh start from base model with expanded LoRA targets including FFN layers.
+  Hypothesis: Turkish phoneme/prosody mapping lives in MLP layers, not just attention.
+  Cannot resume from exp_b (rank-64 attention LoRA + rank-16 MLP = config conflict).
+  CP frozen. Ultra-low LR.
+
+base_model: Qwen3-TTS-0.6B-Base
+resume_from: null   # fresh start — mandatory
+
+lora:
+  targets: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  rank: 16
+  alpha: 32
+  dropout: 0.05
+
+training:
+  lr_lora: 5.0e-7
+  cp_lr: 0.0
+  scheduler: constant
+  warmup_steps: 200
+  grad_accum: 4
+  sample_every: 1000
+
+trainable_params: 10_092_544   # vs 18M for exp_a
+
+evaluation_plan:
+  5K:  "C→K, 1923, yabancı aksan azalıyor mu?"
+  10K: "B1/best ile gerçek karşılaştırma — karar noktası"
+  20K: "issai_run1/best'e yaklaşma kontrolü"
+  45K: "Full epoch final aday"
+
+decision_at_10K:
+  better_than_b1: "Continue to full epoch"
+  worse_than_b1:  "Stop, keep best_perceptual as final"
+  no_difference:  "Base model limit — consider larger model or more data"
+
+test_sentences:
+  - "Bugün hava çok güzel."
+  - "Türkiye Cumhuriyeti bin dokuz yüz yirmi üç yılında kuruldu."
+  - "Çocuklar çiçek, şeker ve üzüm yedi."
+  - "Öğrenciler ölçüm sonuçlarını değerlendirdi."
+  - "Şirket yüzde otuz beş büyüme açıkladı."
+
+progress:
+  1K:  {eval_loss: 7.062, note: "1923 Çince, C→K, yabancı aksan"}
+  2K:  {eval_loss: 6.717, note: "—"}
+  3K:  {eval_loss: 6.537, note: "ilerleme yavaş ama var"}
+  5K:  {eval_loss: null,  note: "pending"}
+  10K: {eval_loss: null,  note: "pending — decision point"}
+
+status: in_progress

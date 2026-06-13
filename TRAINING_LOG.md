@@ -419,6 +419,72 @@ python3 inference.py \
 
 ---
 
+## Experiment C — Final Outcome
+
+**Accepted checkpoint:** `exp_c/final` = step 1000 (6.5 min run, forgot `--max_steps`, ran only 1000 steps)
+
+| Total steps | Eval loss | Perceptual verdict |
+|-------------|-----------|-------------------|
+| 1,000 | 7.062 | Better than B1 — cleaner Turkish accent ✅ |
+| 2,000 | 6.717 | Slightly worse perceptually |
+| 3,000 | 6.537 | Noticeably worse |
+| 5,000 | 6.260 | Metallic and noisy ❌ — training stopped |
+
+**Finding:** MLP LoRA is only beneficial in the first ~1000 steps from base. After that, continued MLP training destroys the acoustic texture prior. Step 1000 is the hard ceiling for this combined strategy.
+
+**New best_perceptual:** `exp_c/final` (step 1000). Copied to `/home/hcfk/checkpoints/best_perceptual` (old `run_b1/best` backed up as `best_perceptual_b1_backup`).
+
+---
+
+## Experiment D — Stage 2: Attention-Only from exp_c Step 1000
+
+**Motivation:** exp_c step 1000 is the best so far, but C→K substitution and foreign accent persist.
+MLP LoRA gave the necessary phoneme/prosody alignment shift. Continuing MLP past 1K destroys acoustic texture.
+Hypothesis: freezing MLP LoRA and continuing with attention-only refinement may reduce accent further without touching the acoustic prior.
+
+This is different from exp_a (attention-only from base): the MLP alignment is already baked in. That bottleneck is gone.
+
+**Checkpoint dependency:** `best_perceptual` must be the exp_c step 1000 checkpoint, NOT run_b1/best.
+Verify before running:
+```bash
+ls -la /home/hcfk/checkpoints/best_perceptual/
+ls -la /home/hcfk/checkpoints/exp_c/final/
+# adapter_config.json should show lora_targets including gate_proj, up_proj, down_proj
+```
+
+**Command:**
+```bash
+python3 /home/hcfk/QwenTR/train.py \
+    --model_dir  /home/hcfk/models/Qwen3-TTS-0.6B-Base \
+    --data_dir   /home/hcfk/datasets/issai_tokens \
+    --output_dir /home/hcfk/checkpoints/exp_d_stage2 \
+    --resume_from /home/hcfk/checkpoints/best_perceptual \
+    --freeze_mlp_lora \
+    --lr 1e-7 --cp_lr 0 \
+    --scheduler constant --warmup_steps 100 \
+    --max_steps 5000 --sample_every 1000 \
+    --lora_targets "q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj" \
+    --lora_rank 16 --lora_alpha 32 \
+    --grad_accum 4
+```
+
+**Why `--lora_targets` must include all 7:** The LoRA config in the loaded checkpoint has all 7 targets. The adapter load will fail if the config doesn't match. `--freeze_mlp_lora` then programmatically freezes gate/up/down_proj after loading.
+
+**Expected trainable params:** attention LoRA only (~4 modules × layers × 2 matrices). Frozen: MLP LoRA, code_predictor, all base weights.
+
+**Decision rules:**
+
+| Step | Evaluate | Stop if |
+|------|----------|---------|
+| 1K | C→K reduced? accent less? | worse than best_perceptual |
+| 2K | Clear improvement vs 1K? | no improvement vs 1K |
+| 3K | Still improving? | flat or degraded vs 2K |
+| 5K | Only if 3K trend positive | — |
+
+**Status:** Planned — pending run.
+
+---
+
 ## Lessons Learned
 
 | # | Lesson |

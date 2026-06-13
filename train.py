@@ -196,6 +196,9 @@ def main():
                         help="cosine: decay to 0; constant: hold LR after warmup")
     parser.add_argument("--freeze_lora",   action="store_true",
                         help="Freeze LoRA/talker.model, train only code_predictor")
+    parser.add_argument("--freeze_mlp_lora", action="store_true",
+                        help="Freeze MLP LoRA (gate/up/down_proj), keep attention LoRA trainable. "
+                             "Use with --resume_from for Stage 2 training.")
     parser.add_argument("--train_code_predictor_only", action="store_true",
                         help="Freeze ALL talker params except code_predictor (isolation test)")
     parser.add_argument("--max_t",         type=int,   default=150,
@@ -284,13 +287,27 @@ def main():
         for p in talker.model.parameters():
             p.requires_grad = False
         print("LoRA/talker.model frozen — training code_predictor only")
+    elif args.freeze_mlp_lora:
+        # Freeze all LoRA, then re-enable only attention LoRA (Stage 2)
+        for name, p in talker.model.named_parameters():
+            if "lora_" in name:
+                p.requires_grad = False
+        for name, p in talker.model.named_parameters():
+            if "lora_" in name and "self_attn" in name:
+                p.requires_grad = True
+        print("STAGE 2 MODE: MLP LoRA frozen, attention LoRA trainable")
 
     trainable = [(n, p.numel()) for n, p in talker.named_parameters() if p.requires_grad]
+    frozen_lora = [(n, p.numel()) for n, p in talker.named_parameters()
+                   if not p.requires_grad and "lora_" in n]
     print("=== TRAINABLE PARAMS ===")
     for name, n in trainable[:20]:
         print(f"  {name}  ({n:,})")
     print(f"  ... ({len(trainable)} param groups total)")
-    print(f"  Trainable total: {sum(n for _, n in trainable):,}\n")
+    print(f"  Trainable total: {sum(n for _, n in trainable):,}")
+    if frozen_lora:
+        print(f"  Frozen LoRA params: {len(frozen_lora)} ({sum(n for _, n in frozen_lora):,} weights)")
+    print()
 
     if args.train_code_predictor_only:
         cp_params = [p for p in talker.code_predictor.parameters() if p.requires_grad]

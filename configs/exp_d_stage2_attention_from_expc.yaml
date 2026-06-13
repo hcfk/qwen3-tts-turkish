@@ -1,0 +1,55 @@
+# Experiment D — Stage 2: attention-only LoRA from exp_c step 1000
+# MLP LoRA frozen (already adapted), only attention LoRA continues
+#
+# Hypothesis: MLP LoRA gave the necessary phoneme/prosody alignment shift.
+# Continuing MLP past 1K destroys acoustic texture.
+# Attention-only refinement from this aligned state may reduce accent
+# without touching the MLP prior.
+
+name: exp_d_stage2
+base_config: exp_c_attention_mlp_rank16.yaml
+resume_from: /home/hcfk/checkpoints/best_perceptual   # = exp_c/final step 1000
+
+lora:
+  targets_trainable: [q_proj, k_proj, v_proj, o_proj]   # attention only
+  targets_frozen:    [gate_proj, up_proj, down_proj]      # MLP frozen
+  rank: 16           # same as exp_c — weights already exist
+  alpha: 32
+
+training:
+  lr_lora: 1.0e-7    # ultra-low — exp_c showed 3e-7 is already too high for continuation
+  cp_lr: 0.0
+  scheduler: constant
+  warmup_steps: 100
+  grad_accum: 4
+  max_steps: 5000
+  sample_every: 1000
+
+command: >
+  python3 /home/hcfk/QwenTR/train.py
+    --model_dir /home/hcfk/models/Qwen3-TTS-0.6B-Base
+    --data_dir /home/hcfk/datasets/issai_tokens
+    --output_dir /home/hcfk/checkpoints/exp_d_stage2
+    --resume_from /home/hcfk/checkpoints/best_perceptual
+    --freeze_mlp_lora
+    --lr 1e-7
+    --cp_lr 0
+    --scheduler constant
+    --warmup_steps 100
+    --max_steps 5000
+    --sample_every 1000
+    --lora_targets "q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj"
+    --lora_rank 16
+    --lora_alpha 32
+    --grad_accum 4
+
+# Note: --lora_targets must still list all 7 modules (LoRA config must match loaded weights).
+# --freeze_mlp_lora then programmatically freezes gate/up/down_proj lora weights after load.
+
+decision_rules:
+  1K: "C→K confusion reduced? 1923 reading improved? vs best_perceptual baseline"
+  2K: "Foreign accent measurably less? Any degradation vs step 1K?"
+  3K: "If no improvement by here: stop — 0.6B ceiling reached"
+  5K: "Only if 3K shows clear positive trend"
+
+status: planned

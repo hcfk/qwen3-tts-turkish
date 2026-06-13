@@ -156,8 +156,7 @@ def save_checkpoint(talker, ckpt_dir, partial_ft=False):
         torch.save(trainable, os.path.join(ckpt_dir, "partial_ft.pt"))
     else:
         talker.model.save_pretrained(ckpt_dir)
-    torch.save(talker.code_predictor.state_dict(),
-               os.path.join(ckpt_dir, "code_predictor.pt"))
+    torch.save(talker.code_predictor.state_dict(), os.path.join(ckpt_dir, "code_predictor.pt"))
 
 
 def generate_sample(tts_wrapper, step, output_dir):
@@ -258,7 +257,19 @@ def main():
         emb_weight[TURKISH_LANG_ID] = mean_lang_emb
         print(f"Initialized Turkish lang embedding (id={TURKISH_LANG_ID}) to mean of {len(existing_lang_ids)} language embeddings")
 
-    if args.resume_from:
+    if args.partial_ft_layers > 0:
+        # Partial full fine-tune — skip LoRA entirely
+        if args.resume_from:
+            ft_path = os.path.join(args.resume_from, "partial_ft.pt")
+            if os.path.exists(ft_path):
+                state = torch.load(ft_path, map_location=dev)
+                talker.load_state_dict(state, strict=False)
+                print(f"Resumed partial FT weights from {ft_path}")
+            cp_ckpt = os.path.join(args.resume_from, "code_predictor.pt")
+            if os.path.exists(cp_ckpt):
+                talker.code_predictor.load_state_dict(torch.load(cp_ckpt, map_location=dev))
+                print(f"Loaded code_predictor weights from {cp_ckpt}")
+    elif args.resume_from:
         print(f"Resuming from {args.resume_from} ...")
         talker.model = PeftModel.from_pretrained(talker.model, args.resume_from, is_trainable=True)
         cp_ckpt = os.path.join(args.resume_from, "code_predictor.pt")
@@ -275,7 +286,8 @@ def main():
             bias="none",
         )
         talker.model = get_peft_model(talker.model, lora_cfg)
-    talker.model.print_trainable_parameters()
+    if args.partial_ft_layers == 0:
+        talker.model.print_trainable_parameters()
 
     train_ds = TSCDataset(f"{args.data_dir}/Train_metadata.json", args.max_t)
     eval_ds  = TSCDataset(f"{args.data_dir}/Test_metadata.json",  max_t=args.max_t)
@@ -305,6 +317,15 @@ def main():
             if "lora_" in name and "self_attn" in name:
                 p.requires_grad = True
         print("STAGE 2 MODE: MLP LoRA frozen, attention LoRA trainable")
+    elif args.partial_ft_layers > 0:
+        for p in talker.parameters():
+            p.requires_grad = False
+        layers = talker.model.model.layers
+        n_layers = len(layers)
+        for layer in layers[n_layers - args.partial_ft_layers:]:
+            for p in layer.parameters():
+                p.requires_grad = True
+        print(f"PARTIAL FT MODE: last {args.partial_ft_layers}/{n_layers} transformer layers trainable, all else frozen")
 
     trainable = [(n, p.numel()) for n, p in talker.named_parameters() if p.requires_grad]
     frozen_lora = [(n, p.numel()) for n, p in talker.named_parameters()
@@ -350,6 +371,7 @@ def main():
               if args.save_at_steps else set()
     if save_at:
         print(f"  Step snapshots will be saved at: {sorted(save_at)}")
+    is_partial_ft = args.partial_ft_layers > 0
 
     global_step    = 0
     best_eval      = float("inf")
@@ -421,7 +443,7 @@ def main():
                     eval_rises = 0
                     ckpt = os.path.join(args.output_dir, "best")
                     os.makedirs(ckpt, exist_ok=True)
-                    save_checkpoint(talker, ckpt)
+                    save_checkpoint(talker, ckpt, partial_ft=is_partial_ft)
                     print(f"  Saved best checkpoint → {ckpt}")
                 else:
                     if eval_loss > prev_eval_loss:
@@ -441,7 +463,7 @@ def main():
 
             if global_step in save_at:
                 snap = os.path.join(args.output_dir, f"step_{global_step:06d}")
-                save_checkpoint(talker, snap)
+                save_checkpoint(talker, snap, partial_ft=is_partial_ft)
                 print(f"  Saved snapshot → {snap}")
 
             if done or (args.max_steps > 0 and global_step >= args.max_steps):
@@ -451,8 +473,8 @@ def main():
         print(f"\nEpoch {epoch+1} done in {(time.time()-t0)/60:.1f} min\n")
 
     final = os.path.join(args.output_dir, "final")
-    save_checkpoint(talker, final)
-    print(f"Training complete. Final adapter → {final}")
+    save_checkpoint(talker, final, partial_ft=is_partial_ft)
+    print(f"Training complete. Final → {final}")
 
 
 if __name__ == "__main__":

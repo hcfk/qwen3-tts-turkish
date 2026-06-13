@@ -44,9 +44,26 @@ Worst perceptual result. Strong evidence against CP training.
 `best_perceptual` checkpoint with trailing silence trimmed in inference.
 Two sentences: "Bugün hava çok güzel." and "Türkiye Cumhuriyeti 1923 yılında kuruldu."
 
-## 07 — Exp C Step 1000 — New `best_perceptual` ✅
+## 07 — Exp C Step 1000
 
 `exp_c/final`: fresh base model, attention+MLP LoRA rank 16, lr=5e-7, 1000 steps, cp_lr=0.
 Full 5-sentence standard test with automatic number normalization.
-Perceptually better than B1 (less foreign accent). Numbers correct (normalizer active).
+Perceptually better than B1. Was best_perceptual until Stage 2 recovery.
+
+## 08 — Exp D Stage 2 (steps 1000–5000)
+
+Stage 2 from exp_c step 1000: MLP LoRA frozen, attention-only lr=1e-7.
+Steps 1000/2000/3000/4000/5000 train.py SAMPLE_SENTENCES samples.
+Note: s2 still used digit "1923" in this run (fixed in subsequent runs).
+Step 2000 was perceptual peak but checkpoint not saved — triggered recovery run.
+
+## 09 — Exp D2 Stage 2 Recovery (steps 1000, 2000)
+
+Re-run of Stage 2 with `--save_at_steps 1000,1500,2000` and SAMPLE_SENTENCES fix.
+s2 now uses "bin dokuz yüz yirmi üç" (spelled out). Step 2000 confirmed better than 1000.
+
+## 10 — Exp D2 Step 2000 — `best_perceptual` ✅
+
+Full 5-sentence `run_inference_test.py` evaluation from Stage 2 step 2000.
+Number normalizer active. Best perceptual result across all experiments.
 **This is the current best_perceptual checkpoint.**

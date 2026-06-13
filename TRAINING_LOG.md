@@ -516,6 +516,58 @@ Total run time: 31.8 minutes.
 
 ---
 
+## Experiment D2 — Stage 2 Recovery Run
+
+**Problem:** exp_d Stage 2 step 2000 was perceptually best but checkpoint was overwritten (monotonic eval loss → auto-saved best = step 5000).
+
+**Fix:** Re-run Stage 2 with `--save_at_steps 1000,1500,2000` and `max_steps=2000`. Also fixed `SAMPLE_SENTENCES` digit "1923" → spelled-out Turkish.
+
+**Result:** Step 2000 confirmed better than step 1000. 12.7 minutes total.
+
+**Full 5-sentence eval** (`run_inference_test.py`) on step 2000:
+- s1: 2.6s — clean
+- s2: 5.4s — "Türkiye Cumhuriyeti" still has C→K partially; numbers correct
+- s3–s5: good Turkish phonemes overall
+
+**Decision:** exp_d2 step 2000 promoted to `best_perceptual`.
+Server: `best_perceptual_expc_backup` = old exp_c step 1000; `best_perceptual` = exp_d2 step_002000.
+
+**Remaining limitation:** "Türkiye Cumhuriyeti" C→K substitution still present. Foreign accent reduced but not eliminated. LoRA ceiling likely reached.
+
+---
+
+## Experiment E — Partial Full Fine-tune (planned)
+
+**Motivation:** After 4 LoRA experiments, C→K and foreign accent persist. LoRA modifies a low-rank projection; the residual accent may live in the null space of the LoRA update. Direct weight training of the deepest transformer layers may express the necessary phoneme/acoustic shift.
+
+**Strategy:** Fresh start from base model. No LoRA. Freeze all layers except last 2 transformer blocks. CP frozen. Very low LR.
+
+**Command:**
+```bash
+python3 /home/hcfk/train.py \
+    --model_dir  /home/hcfk/models/Qwen3-TTS-0.6B-Base \
+    --data_dir   /home/hcfk/datasets/issai_tokens \
+    --output_dir /home/hcfk/checkpoints/exp_e_partial_ft \
+    --partial_ft_layers 2 \
+    --lr 1e-7 --cp_lr 0 \
+    --scheduler constant --warmup_steps 100 \
+    --max_steps 3000 --sample_every 1000 \
+    --save_at_steps "1000,1500,2000,2500,3000" \
+    --grad_accum 4
+```
+
+**Decision rules:**
+
+| Step | Check | Stop if |
+|------|-------|---------|
+| 1K | Any improvement? Clean audio? | Metallic/worse than best_perceptual |
+| 2K | C→K reduced? Accent less? | No improvement or degraded |
+| 3K | Continuing trend? | Flat or degraded vs 2K |
+
+**Status:** Pending launch.
+
+---
+
 ## Lessons Learned
 
 | # | Lesson |

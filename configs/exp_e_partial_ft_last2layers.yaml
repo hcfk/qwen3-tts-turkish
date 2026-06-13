@@ -1,0 +1,65 @@
+# Experiment E — Partial full fine-tune, last 2 transformer layers
+#
+# Hypothesis: C->K substitution and persistent foreign accent live in the
+# deepest phoneme/acoustic mapping layers. LoRA rank-16/64 cannot express
+# the full weight change needed. Direct training of the last 2 transformer
+# layers (without LoRA) gives more expressive gradient flow to those layers.
+#
+# Base model: Qwen3-TTS-0.6B-Base (fresh start — no LoRA weights)
+# CP frozen: yes (F3 — CP training always degrades audio)
+# All other base weights: frozen
+
+name: exp_e
+base: Qwen3-TTS-0.6B-Base   # fresh — no LoRA
+
+trainable:
+  last_n_transformer_layers: 2
+  code_predictor: frozen
+  speech_tokenizer: frozen
+  early_layers: frozen
+
+training:
+  lr: 1e-7
+  cp_lr: 0.0
+  scheduler: constant
+  warmup_steps: 100
+  grad_accum: 4
+  max_steps: 3000
+  sample_every: 1000
+  save_at_steps: [1000, 1500, 2000, 2500, 3000]
+
+command: >
+  python3 /home/hcfk/train.py
+    --model_dir /home/hcfk/models/Qwen3-TTS-0.6B-Base
+    --data_dir /home/hcfk/datasets/issai_tokens
+    --output_dir /home/hcfk/checkpoints/exp_e_partial_ft
+    --partial_ft_layers 2
+    --lr 1e-7
+    --cp_lr 0
+    --scheduler constant
+    --warmup_steps 100
+    --max_steps 3000
+    --sample_every 1000
+    --save_at_steps "1000,1500,2000,2500,3000"
+    --grad_accum 4
+
+decision_rules:
+  1K: "Any Turkish improvement? Metallic/noisy? Compare vs best_perceptual (Stage 2 step 2000)"
+  2K: "C->K reduced? Accent less foreign? Still clean audio?"
+  3K: "If 2K positive: continue. If degraded at any point: stop immediately."
+  stop_if: "Metallic artifacts, noisy audio, or worse than best_perceptual"
+
+success_criteria:
+  - C->K substitution reduced or eliminated
+  - Foreign accent measurably less
+  - No metallic/noisy artifacts
+  - EOS stable
+
+failure_criteria:
+  - Audio degrades (metallic, noisy)
+  - No perceptual improvement over Stage 2 step 2000
+  - Catastrophic forgetting of base voice quality
+
+if_fails: "0.6B model ceiling confirmed; consider Qwen3-TTS-1.7B or Turkish-capable base"
+
+status: planned

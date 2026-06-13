@@ -202,6 +202,9 @@ def main():
                         help="Max codec frames (~12s at 12.5Hz)")
     parser.add_argument("--lora_rank",     type=int,   default=64)
     parser.add_argument("--lora_alpha",    type=int,   default=128)
+    parser.add_argument("--lora_targets",  type=str,
+                        default="q_proj,k_proj,v_proj,o_proj",
+                        help="Comma-separated LoRA target modules")
     parser.add_argument("--warmup_steps",  type=int,   default=50)
     parser.add_argument("--log_steps",     type=int,   default=10)
     parser.add_argument("--save_steps",    type=int,   default=100)
@@ -256,7 +259,7 @@ def main():
             r=args.lora_rank,
             lora_alpha=args.lora_alpha,
             lora_dropout=0.05,
-            target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+            target_modules=[m.strip() for m in args.lora_targets.split(",")],
             bias="none",
         )
         talker.model = get_peft_model(talker.model, lora_cfg)

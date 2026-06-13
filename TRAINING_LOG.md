@@ -255,6 +255,46 @@ Sub loss dropped below random baseline (7.47 < 7.62) for the first time. Eval lo
 
 ---
 
+## Experiment C — Fresh Start, Attention + MLP LoRA
+
+**Motivation:** run_b1/best sounds like a foreigner speaking Turkish. Attention-only LoRA adapts token routing but Turkish phoneme/prosody mapping lives in FFN layers (gate/up/down_proj). Expanding LoRA targets to include MLP may reduce the accent.
+
+Cannot resume from run_b1/best (rank-64 attention LoRA already applied — adding different rank MLP LoRA on top would corrupt the adapter config). Must start fresh.
+
+CP stays frozen. Sub loss is not a decision signal. Judge only by perceptual samples.
+
+**Command:**
+```bash
+python3 train.py \
+    --model_dir  /home/hcfk/models/Qwen3-TTS-0.6B-Base \
+    --data_dir   /home/hcfk/datasets/issai_tokens \
+    --output_dir /home/hcfk/checkpoints/exp_c \
+    --lora_targets "q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj" \
+    --lora_rank  16 --lora_alpha 32 \
+    --lr 5e-7 --cp_lr 0 \
+    --scheduler constant --warmup_steps 200 \
+    --grad_accum 4 --sample_every 2000 --epochs 1
+```
+
+**Hyperparameters and rationale:**
+- `rank=16` (was 64): smaller rank = less risk of destroying acoustic priors; MLP has many more params than attention, rank 16 is conservative
+- `lr=5e-7` (was 5e-6 in epoch 1): ultra-low to preserve base acoustic quality
+- `cp_lr=0`: CP training degrades audio regardless of sub loss improvement (proven in B2/B3)
+- `sample_every=2000`: full epoch is ~45K steps, check quality at 2K/4K/... intervals
+
+**Decision rule:**
+
+| Sample result vs run_b1/best | Action |
+|-----------------------------|--------|
+| Accent reduced, no new noise | Experiment C is the new main path |
+| Metallic/noisy | Reduce rank or LR |
+| No perceptual difference | Attention+MLP LoRA insufficient; base model limit reached |
+| Degraded | run_b1/best stays final |
+
+**Status:** Running (PID 631534). Results TBD — will update after sample evaluation.
+
+---
+
 ## Final Checkpoint — `best_perceptual`
 
 **`/home/hcfk/checkpoints/best_perceptual`** = copy of `run_b1/best`

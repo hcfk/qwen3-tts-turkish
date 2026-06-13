@@ -346,7 +346,7 @@ def main():
                 generate_sample(tts_wrapper, global_step, samples_dir)
                 talker.train()
 
-            if args.max_steps > 0 and global_step >= args.max_steps:
+            if done or (args.max_steps > 0 and global_step >= args.max_steps):
                 done = True
                 break
 

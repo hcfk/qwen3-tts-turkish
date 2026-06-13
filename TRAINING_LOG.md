@@ -369,6 +369,18 @@ python3 inference.py \
 
 ---
 
+## SSH / Inference Notes
+
+**PuTTY plink mangles Turkish characters.** Passing Turkish text via `plink ... "python3 inference.py --text 'Türkçe metin'"` causes `ü → ?`, `ş → ?` etc. The model receives corrupted input and produces wrong phonemes.
+
+**Fix:** Use `run_inference_test.py` — transfer with pscp (binary, encoding-safe), run with plink. Turkish text is hardcoded in the Python file as UTF-8. This is the correct way to test inference with Turkish characters.
+
+**Always use `run_inference_test.py` for quality evaluation**, not inline `--text` arguments over SSH.
+
+**Numbers:** Pass numbers as Turkish words, not digits. `1923` → model falls back to Chinese phoneme prior. `bin dokuz yüz yirmi üç` → model can pronounce correctly if trained on spelled-out forms.
+
+---
+
 ## Lessons Learned
 
 | # | Lesson |

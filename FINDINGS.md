@@ -49,13 +49,22 @@ The ceiling is architectural: `q/k/v/o_proj` adaptation shifts token routing and
 
 ---
 
-## F6 — Expanding LoRA to FFN layers (Experiment C) is the correct next step
+## F6 — MLP LoRA helps only in a very short training window
 
-Experiment C trains LoRA on all 7 projection types (attention + MLP), rank 16, lr = 5e-7, cp frozen, from base model.
+Experiment C (attention + MLP LoRA, rank 16, lr = 5e-7, cp frozen, fresh base model) produced better perceptual audio than B1 at **step 1000**, but degraded progressively after that:
 
-Early results (3K steps): eval loss drops faster than epoch 1 at the same step count, suggesting the FFN LoRA provides additional signal. Perceptual improvement is gradual — meaningful comparison against `best_perceptual` expected around 10K steps.
+| Total steps | Perceptual result |
+|-------------|------------------|
+| 1.000 | Better than B1 — new best_perceptual |
+| 2.000 | Slightly worse |
+| 3.000 | Noticeably worse |
+| 5.000 | Metallic and noisy — rejected |
 
-**Status:** In progress. This section will be updated after 10K and full-epoch evaluation.
+**Conclusion:** MLP LoRA is useful only with very early stopping (≤ 1K steps from base). Beyond that it destroys the acoustic prior, similar to what CP training did in Exp B.
+
+**Rule:** If using MLP LoRA, set `max_steps ≤ 1000` from base model. Do not continue past the first quality check.
+
+**Current best_perceptual:** `exp_c/final` (step 1000, attention+MLP rank 16, lr=5e-7, cp frozen).
 
 ---
 
@@ -76,5 +85,5 @@ Passing Turkish text inline via PuTTY plink (`--text "Türkçe"`) silently corru
 | F3: CP training degrades audio | Keep cp_lr = 0 forever |
 | F4: LoRA-only ultra-low LR is safest | B1 is the production baseline |
 | F5: Attention-only LoRA hits ceiling | Rank 64 attn-only cannot reach native accent |
-| F6: FFN LoRA is the next hypothesis | Experiment C in progress |
+| F6: MLP LoRA only helps at ≤1K steps | Early stopping mandatory; later steps degrade audio |
 | F7: SSH breaks Turkish chars | Use pscp + hardcoded test script |

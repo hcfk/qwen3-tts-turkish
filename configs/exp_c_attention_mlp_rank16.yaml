@@ -46,10 +46,14 @@ test_sentences:
   - "Şirket yüzde otuz beş büyüme açıkladı."
 
 progress:
-  1K:  {eval_loss: 7.062, note: "1923 Çince, C→K, yabancı aksan"}
-  2K:  {eval_loss: 6.717, note: "—"}
-  3K:  {eval_loss: 6.537, note: "ilerleme yavaş ama var"}
-  5K:  {eval_loss: null,  note: "pending"}
-  10K: {eval_loss: null,  note: "pending — decision point"}
+  1K:  {eval_loss: 7.062, note: "Better than B1 — new best_perceptual ✅"}
+  2K:  {eval_loss: 6.717, note: "Slightly worse"}
+  3K:  {eval_loss: 6.537, note: "Noticeably worse"}
+  5K:  {eval_loss: 6.260, note: "Metallic and noisy ❌ — run stopped"}
 
-status: in_progress
+finding: >
+  MLP LoRA useful only at step 1000. After that, acoustic prior degrades.
+  Early stopping at 1K is mandatory. Do not continue exp_c past 1K steps.
+
+accepted_checkpoint: exp_c/final   # step 1000
+status: completed — accepted at 1K, rejected beyond

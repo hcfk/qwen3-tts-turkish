@@ -320,7 +320,8 @@ def main():
     elif args.partial_ft_layers > 0:
         for p in talker.parameters():
             p.requires_grad = False
-        layers = talker.model.model.layers
+        # In partial FT mode talker.model is Qwen3TTSTalkerModel directly (no PeftModel wrapper)
+        layers = talker.model.layers
         n_layers = len(layers)
         for layer in layers[n_layers - args.partial_ft_layers:]:
             for p in layer.parameters():

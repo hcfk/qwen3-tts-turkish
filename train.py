@@ -183,6 +183,8 @@ def main():
     parser.add_argument("--max_steps",     type=int,   default=1000,
                         help="Stop after this many steps (0 = full epochs)")
     parser.add_argument("--lr",            type=float, default=5e-6)
+    parser.add_argument("--cp_lr",         type=float, default=1e-5,
+                        help="Learning rate for code_predictor (higher than LoRA lr)")
     parser.add_argument("--max_t",         type=int,   default=150,
                         help="Max codec frames (~12s at 12.5Hz)")
     parser.add_argument("--lora_rank",     type=int,   default=64)
@@ -251,13 +253,17 @@ def main():
                           collate_fn=collate_single, num_workers=0)
 
     total_steps = args.max_steps if args.max_steps > 0 else len(train_dl) * args.epochs
-    optimizer = AdamW(
-        [p for p in talker.parameters() if p.requires_grad],
-        lr=args.lr, weight_decay=0.01,
-    )
+
+    lora_params = [p for n, p in talker.named_parameters()
+                   if p.requires_grad and "code_predictor" not in n]
+    cp_params   = [p for p in talker.code_predictor.parameters() if p.requires_grad]
+    optimizer = AdamW([
+        {"params": lora_params, "lr": args.lr,    "initial_lr": args.lr},
+        {"params": cp_params,   "lr": args.cp_lr, "initial_lr": args.cp_lr},
+    ], weight_decay=0.01)
     scheduler = CosineAnnealingLR(optimizer, T_max=max(1, total_steps - args.warmup_steps))
 
-    print(f"\nTraining: lr={args.lr:.1e}  max_steps={total_steps}"
+    print(f"\nTraining: lr_lora={args.lr:.1e}  lr_cp={args.cp_lr:.1e}  max_steps={total_steps}"
           f"  grad_accum={args.grad_accum}  resume={'yes' if args.resume_from else 'no'}")
 
     global_step    = 0
@@ -294,19 +300,21 @@ def main():
 
             global_step += 1
             if global_step <= args.warmup_steps:
+                factor = global_step / args.warmup_steps
                 for pg in optimizer.param_groups:
-                    pg["lr"] = args.lr * global_step / args.warmup_steps
+                    pg["lr"] = pg["initial_lr"] * factor
             else:
                 scheduler.step()
 
             log_loss += loss.item()
 
             if global_step % args.log_steps == 0:
-                avg = log_loss / args.log_steps
-                lr  = optimizer.param_groups[0]["lr"]
+                avg    = log_loss / args.log_steps
+                lr_lora = optimizer.param_groups[0]["lr"]
+                lr_cp   = optimizer.param_groups[1]["lr"]
                 print(f"  Epoch {epoch+1} Step {global_step:6d} | "
                       f"loss={avg:.4f}  main={l_main.item():.4f}  "
-                      f"sub={l_sub.item():.4f}  lr={lr:.2e}")
+                      f"sub={l_sub.item():.4f}  lr_lora={lr_lora:.2e}  lr_cp={lr_cp:.2e}")
                 log_loss = 0.0
 
             if global_step % args.save_steps == 0:

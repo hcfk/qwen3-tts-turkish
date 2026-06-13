@@ -56,7 +56,7 @@ def generate(tts_wrapper, text: str, output_path: str):
     codes_tensor = talker_codes[0].unsqueeze(0).cuda()  # [1, T, 16]
     with torch.inference_mode():
         wav = speech_tok.decode(codes_tensor)
-    wav_np = wav.squeeze().cpu().float().numpy()
+    wav_np = wav.audio_values[0].cpu().float().numpy()
     sf.write(output_path, wav_np, 24000)
     print(f"Saved → {output_path}  ({len(wav_np)/24000:.2f}s)")
 

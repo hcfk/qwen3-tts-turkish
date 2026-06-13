@@ -298,10 +298,13 @@ def main():
         lora_params = [p for n, p in talker.named_parameters()
                        if p.requires_grad and "code_predictor" not in n]
         cp_params   = [p for p in talker.code_predictor.parameters() if p.requires_grad]
-        optimizer = AdamW([
-            {"params": lora_params, "lr": args.lr,    "initial_lr": args.lr},
-            {"params": cp_params,   "lr": args.cp_lr, "initial_lr": args.cp_lr},
-        ], weight_decay=0.01)
+        param_groups = [{"params": lora_params, "lr": args.lr, "initial_lr": args.lr}]
+        if args.cp_lr > 0 and cp_params:
+            param_groups.append({"params": cp_params, "lr": args.cp_lr, "initial_lr": args.cp_lr})
+        else:
+            for p in cp_params:
+                p.requires_grad = False
+        optimizer = AdamW(param_groups, weight_decay=0.01)
 
     decay_steps = max(1, total_steps - args.warmup_steps)
     if args.scheduler == "cosine":
@@ -359,7 +362,7 @@ def main():
             if global_step % args.log_steps == 0:
                 avg     = log_loss / args.log_steps
                 lr_lora = optimizer.param_groups[0]["lr"]
-                lr_cp   = optimizer.param_groups[-1]["lr"]
+                lr_cp   = optimizer.param_groups[-1]["lr"] if len(optimizer.param_groups) > 1 else 0.0
                 print(f"  Epoch {epoch+1} Step {global_step:6d} | "
                       f"loss={avg:.4f}  main={l_main.item():.4f}  "
                       f"sub={l_sub.item():.4f}  lr_lora={lr_lora:.2e}  lr_cp={lr_cp:.2e}")

@@ -189,6 +189,8 @@ def main():
                         help="cosine: decay to 0; constant: hold LR after warmup")
     parser.add_argument("--freeze_lora",   action="store_true",
                         help="Freeze LoRA/talker.model, train only code_predictor")
+    parser.add_argument("--train_code_predictor_only", action="store_true",
+                        help="Freeze ALL talker params except code_predictor (isolation test)")
     parser.add_argument("--max_t",         type=int,   default=150,
                         help="Max codec frames (~12s at 12.5Hz)")
     parser.add_argument("--lora_rank",     type=int,   default=64)
@@ -258,18 +260,37 @@ def main():
 
     total_steps = args.max_steps if args.max_steps > 0 else len(train_dl) * args.epochs
 
-    if args.freeze_lora:
+    if args.train_code_predictor_only:
+        for p in talker.parameters():
+            p.requires_grad = False
+        for p in talker.code_predictor.parameters():
+            p.requires_grad = True
+        print("ISOLATION MODE: all talker params frozen except code_predictor")
+    elif args.freeze_lora:
         for p in talker.model.parameters():
             p.requires_grad = False
         print("LoRA/talker.model frozen — training code_predictor only")
 
-    lora_params = [p for n, p in talker.named_parameters()
-                   if p.requires_grad and "code_predictor" not in n]
-    cp_params   = [p for p in talker.code_predictor.parameters() if p.requires_grad]
-    optimizer = AdamW([
-        {"params": lora_params, "lr": args.lr,    "initial_lr": args.lr},
-        {"params": cp_params,   "lr": args.cp_lr, "initial_lr": args.cp_lr},
-    ], weight_decay=0.01)
+    trainable = [(n, p.numel()) for n, p in talker.named_parameters() if p.requires_grad]
+    print("=== TRAINABLE PARAMS ===")
+    for name, n in trainable[:20]:
+        print(f"  {name}  ({n:,})")
+    print(f"  ... ({len(trainable)} param groups total)")
+    print(f"  Trainable total: {sum(n for _, n in trainable):,}\n")
+
+    if args.train_code_predictor_only:
+        cp_params = [p for p in talker.code_predictor.parameters() if p.requires_grad]
+        optimizer = AdamW([
+            {"params": cp_params, "lr": args.cp_lr, "initial_lr": args.cp_lr, "weight_decay": 0.01},
+        ], betas=(0.9, 0.95), eps=1e-8)
+    else:
+        lora_params = [p for n, p in talker.named_parameters()
+                       if p.requires_grad and "code_predictor" not in n]
+        cp_params   = [p for p in talker.code_predictor.parameters() if p.requires_grad]
+        optimizer = AdamW([
+            {"params": lora_params, "lr": args.lr,    "initial_lr": args.lr},
+            {"params": cp_params,   "lr": args.cp_lr, "initial_lr": args.cp_lr},
+        ], weight_decay=0.01)
 
     decay_steps = max(1, total_steps - args.warmup_steps)
     if args.scheduler == "cosine":
@@ -325,9 +346,9 @@ def main():
             log_loss += loss.item()
 
             if global_step % args.log_steps == 0:
-                avg    = log_loss / args.log_steps
+                avg     = log_loss / args.log_steps
                 lr_lora = optimizer.param_groups[0]["lr"]
-                lr_cp   = optimizer.param_groups[1]["lr"]
+                lr_cp   = optimizer.param_groups[-1]["lr"]
                 print(f"  Epoch {epoch+1} Step {global_step:6d} | "
                       f"loss={avg:.4f}  main={l_main.item():.4f}  "
                       f"sub={l_sub.item():.4f}  lr_lora={lr_lora:.2e}  lr_cp={lr_cp:.2e}")

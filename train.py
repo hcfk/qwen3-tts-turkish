@@ -149,6 +149,13 @@ def compute_loss(text, codec_codes, talker, processor, dev, dtype, sub_batch):
     return loss_main + 0.5 * (total_sub / T), loss_main, total_sub / T
 
 
+def save_checkpoint(talker, ckpt_dir):
+    os.makedirs(ckpt_dir, exist_ok=True)
+    talker.model.save_pretrained(ckpt_dir)
+    torch.save(talker.code_predictor.state_dict(),
+               os.path.join(ckpt_dir, "code_predictor.pt"))
+
+
 def generate_sample(tts_wrapper, step, output_dir):
     speech_tok = tts_wrapper.model.speech_tokenizer.model
     for i, text in enumerate(SAMPLE_SENTENCES):
@@ -239,6 +246,10 @@ def main():
     if args.resume_from:
         print(f"Resuming from {args.resume_from} ...")
         talker.model = PeftModel.from_pretrained(talker.model, args.resume_from, is_trainable=True)
+        cp_ckpt = os.path.join(args.resume_from, "code_predictor.pt")
+        if os.path.exists(cp_ckpt):
+            talker.code_predictor.load_state_dict(torch.load(cp_ckpt, map_location=dev))
+            print(f"Loaded code_predictor weights from {cp_ckpt}")
     else:
         lora_cfg = LoraConfig(
             task_type=TaskType.FEATURE_EXTRACTION,
@@ -373,7 +384,7 @@ def main():
                     eval_rises = 0
                     ckpt = os.path.join(args.output_dir, "best")
                     os.makedirs(ckpt, exist_ok=True)
-                    talker.model.save_pretrained(ckpt)
+                    save_checkpoint(talker, ckpt)
                     print(f"  Saved best checkpoint → {ckpt}")
                 else:
                     if eval_loss > prev_eval_loss:
@@ -398,8 +409,7 @@ def main():
         print(f"\nEpoch {epoch+1} done in {(time.time()-t0)/60:.1f} min\n")
 
     final = os.path.join(args.output_dir, "final")
-    os.makedirs(final, exist_ok=True)
-    talker.model.save_pretrained(final)
+    save_checkpoint(talker, final)
     print(f"Training complete. Final adapter → {final}")
 
 

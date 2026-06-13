@@ -36,6 +36,9 @@ eval_output/
 !samples/
 !samples/**
 
+# Scripts with credentials
+push_to_hf.py
+
 # Claude Code
 CLAUDE.md
 

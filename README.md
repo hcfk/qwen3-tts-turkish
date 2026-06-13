@@ -1,3 +1,18 @@
+---
+language:
+  - tr
+license: mit
+base_model: Qwen/Qwen3-TTS-0.6B-Base
+tags:
+  - text-to-speech
+  - turkish
+  - lora
+  - peft
+  - qwen3-tts
+datasets:
+  - issai/Turkish_Speech_Corpus
+---
+
 # Qwen3-TTS Turkish Fine-tuning
 
 Fine-tuning [Qwen3-TTS-0.6B-Base](https://huggingface.co/Qwen/Qwen3-TTS-0.6B-Base) for Turkish language TTS using LoRA.
@@ -142,6 +157,12 @@ See `FINDINGS.md` for key insights and `TRAINING_LOG.md` for run-by-run details.
 - Not intended for impersonation or non-consensual voice cloning
 - Experimental quality only — do not use in production voice applications
 - Base model (Qwen3-TTS) and ISSAI dataset are subject to their own licenses
+
+## HuggingFace
+
+Model adapter weights and docs: [huggingface.co/hcfk/qwen3-tts-turkish](https://huggingface.co/hcfk/qwen3-tts-turkish)
+
+---
 
 ## Acknowledgements
 

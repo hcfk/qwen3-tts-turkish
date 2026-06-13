@@ -66,4 +66,10 @@ s2 now uses "bin dokuz yüz yirmi üç" (spelled out). Step 2000 confirmed bette
 
 Full 5-sentence `run_inference_test.py` evaluation from Stage 2 step 2000.
 Number normalizer active. Best perceptual result across all experiments.
-**This is the current best_perceptual checkpoint.**
+**This is the final best_perceptual checkpoint for Qwen3-TTS-0.6B.**
+
+## 11 — Exp E Partial FT (last 2 layers)
+
+Partial full fine-tune of last 2 transformer layers (no LoRA), lr=1e-6, max_steps=500.
+s1 and s2 at step 500. Perceptual quality WORSE than Stage 2 step 2000.
+Confirms F9: 0.6B ceiling reached. Partial FT does not outperform LoRA here.

@@ -536,35 +536,48 @@ Server: `best_perceptual_expc_backup` = old exp_c step 1000; `best_perceptual` =
 
 ---
 
-## Experiment E — Partial Full Fine-tune (planned)
+## Experiment E — Partial Full Fine-tune
 
-**Motivation:** After 4 LoRA experiments, C→K and foreign accent persist. LoRA modifies a low-rank projection; the residual accent may live in the null space of the LoRA update. Direct weight training of the deepest transformer layers may express the necessary phoneme/acoustic shift.
+**Hypothesis:** C→K and foreign accent live in the deepest phoneme/acoustic mapping layers. LoRA low-rank updates cannot fully express the needed weight change. Direct training of last 2 transformer layers may break through.
 
-**Strategy:** Fresh start from base model. No LoRA. Freeze all layers except last 2 transformer blocks. CP frozen. Very low LR.
+**Run 1 — lr=1e-7, max_steps=3000:**
+- Eval loss completely flat at 7.78 for all steps. No learning.
+- Root cause: 1e-7 is too low for full weight updates (effective gradient step too small).
 
-**Command:**
-```bash
-python3 /home/hcfk/train.py \
-    --model_dir  /home/hcfk/models/Qwen3-TTS-0.6B-Base \
-    --data_dir   /home/hcfk/datasets/issai_tokens \
-    --output_dir /home/hcfk/checkpoints/exp_e_partial_ft \
-    --partial_ft_layers 2 \
-    --lr 1e-7 --cp_lr 0 \
-    --scheduler constant --warmup_steps 100 \
-    --max_steps 3000 --sample_every 1000 \
-    --save_at_steps "1000,1500,2000,2500,3000" \
-    --grad_accum 4
-```
+**Run 2 — lr=5e-7, max_steps=1000:**
+- Eval loss: 7.7837 → 7.7773 over 600 steps (drop: 0.006).
+- LoRA at same LR: dropped 0.28 over 500 steps — 45× faster.
+- Still no meaningful learning.
 
-**Decision rules:**
+**Run 3 — lr=1e-6, max_steps=500, sample_every=100:**
+- Eval loss: 7.7791 → 7.7559 over 500 steps (drop: 0.023).
+- LoRA at 5e-7: dropped 0.28 over 500 steps — 12× faster.
+- Perceptual: step 500 sample WORSE than Stage 2 step 2000 (best_perceptual).
 
-| Step | Check | Stop if |
-|------|-------|---------|
-| 1K | Any improvement? Clean audio? | Metallic/worse than best_perceptual |
-| 2K | C→K reduced? Accent less? | No improvement or degraded |
-| 3K | Continuing trend? | Flat or degraded vs 2K |
+**Conclusion:** Partial full fine-tune of last 2 layers did NOT outperform LoRA-based Stage 2. The approach is fundamentally less efficient for this model architecture than staged LoRA. F9 confirmed.
 
-**Status:** Pending launch.
+---
+
+## Final 0.6B Decision — F9 Confirmed
+
+**Stage 2 step 2000 is the final best_perceptual checkpoint for Qwen3-TTS-0.6B.**
+
+| Experiment | Method | Best result |
+|-----------|--------|-------------|
+| exp_a | Attention LoRA rank 64 | Turkish intelligible, strong accent |
+| run_b1 | LoRA-only ultra-low LR | Better accent, CP frozen |
+| exp_c | Attention+MLP LoRA rank 16 | Best at step 1K only |
+| exp_d Stage 2 | Freeze MLP LoRA, attn-only | Best overall — current best_perceptual |
+| exp_e partial FT | Last 2 layers full train | Did NOT outperform LoRA |
+
+**Remaining issues at 0.6B ceiling:**
+- Foreign accent persists
+- C→K substitution ("Cumhuriyeti" → "Kumhuriyeti") partially present
+- These cannot be resolved with LoRA or partial FT at this model scale
+
+**Release decision:** Stage 2 step 2000 released as v0.1-experimental.
+
+**Next direction:** Qwen3-TTS-1.7B experiment or Turkish-capable TTS base model.
 
 ---
 

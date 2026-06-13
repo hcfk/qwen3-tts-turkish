@@ -86,16 +86,25 @@ Eval loss decreased monotonically from 7.059 (step 100) to 6.831 (step 5000), co
 
 ---
 
-## F9 — LoRA surface adaptation may be insufficient for full accent elimination
+## F9 — Qwen3-TTS-0.6B has reached its practical Turkish adaptation ceiling
 
-After 4 experiments (exp_a, exp_c, exp_d) across attention-only, attention+MLP, and staged LoRA strategies, a persistent foreign accent and C→K phoneme substitution remain. Progress is real but the ceiling is becoming visible.
+**Confirmed by exp_e (partial full fine-tune, last 2 transformer layers).**
 
-Hypothesis: Turkish phoneme-to-codec mapping requires deeper weight changes than LoRA rank-16/64 can express. LoRA modifies a low-rank projection of the weight matrices; the residual accent may live in the null space of the LoRA update.
+After 5 experiments (exp_a, run_b1–b3, exp_c, exp_d Stage 2, exp_e partial FT), a persistent foreign accent and C→K phoneme substitution remain and could not be eliminated at this model scale.
 
-Candidate next approaches:
-- **Partial full fine-tune**: last 2–4 transformer layers fully trainable, base weights modified directly
-- **Larger base model**: Qwen3-TTS-1.7B or 3B may have more capacity for the phoneme shift
-- **Different base model**: a TTS base with native Turkish or broader multilingual phoneme coverage
+**Exp E results — all learning rate variants failed to outperform Stage 2:**
+
+| Run | Method | LR | Steps | Eval loss drop | Outcome |
+|-----|--------|----|-------|---------------|---------|
+| E1 | Partial FT last 2 layers | 1e-7 | 3000 | ~0.000 (flat) | 0 learning |
+| E2 | Partial FT last 2 layers | 5e-7 | 600 | 0.006 | 45× slower than LoRA |
+| E3 | Partial FT last 2 layers | 1e-6 | 500 | 0.023 | Perceptual worse than Stage 2 |
+
+LoRA at lr=5e-7 achieved 0.28 eval loss drop in 500 steps — 12× faster than partial FT at the same LR.
+
+**Conclusion:** The remaining accent and C→K issues are not expressible through either LoRA rank-16 updates or direct weight training of the last 2 layers. The 0.6B model capacity is the binding constraint.
+
+**Next direction:** Qwen3-TTS-1.7B or a TTS base with native Turkish phoneme coverage.
 
 ---
 
@@ -119,4 +128,4 @@ Passing Turkish text inline via PuTTY plink (`--text "Türkçe"`) silently corru
 | F6: MLP LoRA only helps at ≤1K steps | Early stopping mandatory; later steps degrade audio |
 | F7: SSH breaks Turkish chars | Use pscp + hardcoded test script |
 | F8: Staged LoRA works; eval loss ≠ perceptual peak | Always snapshot at candidate steps |
-| F9: LoRA ceiling may require partial full fine-tune or larger model | Next experiments: exp_e partial FT or scale up |
+| F9: 0.6B ceiling confirmed — partial FT also failed | Next direction: Qwen3-TTS-1.7B or Turkish-native base model |

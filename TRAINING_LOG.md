@@ -197,33 +197,105 @@ python3 train.py \
 
 Stop at first sign of noise. Listen to samples at every 100-step checkpoint.
 
-### Run B2 (if B1 stable) — tiny joint update
+### Run B1 — Results
+
+| Step | eval loss | sub loss | note |
+|------|-----------|----------|------|
+| 100  | 6.454     | ~9.2     | |
+| 200  | 6.438     | ~9.2     | |
+| 300  | 6.424     | ~9.0     | |
+| 400  | 6.409     | ~9.3     | |
+| 500  | **6.397** | ~9.1     | best overall |
+
+Sub loss higher than issai_run1/final (9.x vs 7.7) because CP is frozen and tiny LoRA updates shift hidden states away from CP's training distribution. This is expected at cp_lr=0.
+
+**Sample verdict:** Step 500 sounds noticeably more Turkish than issai_run1/final. Trailing silence present (inference max_new_tokens too generous, not a training issue). **Selected as `best_perceptual`.**
+
+---
+
+### Run B2 — REJECTED (cp_lr degrades audio)
 
 ```bash
---lr 2e-7 --cp_lr 5e-6 --max_steps 500
+--resume_from run_b1/best --lr 2e-7 --cp_lr 5e-6 --max_steps 500
 ```
 
-### Decision rule
+| Step | eval loss | sub loss |
+|------|-----------|----------|
+| 100  | 5.752     | 7.76     |
+| 200  | 5.716     | 7.69     |
+| 300  | 5.703     | 7.66     |
+| 400  | 5.698     | 7.65     |
+| 500  | **5.692** | 7.65     |
 
-| B1 sample result | Action |
-|-----------------|--------|
-| Same or better | Continue to B2 |
-| Worse / noisy | `issai_run1/final` is optimal — stop training |
+Metrics looked good but **perceptual sample quality degraded**. CP adapting to updated LoRA hidden states broke acoustic detail.
 
-**`issai_run1/final` samples archived at:** `/home/hcfk/eval_archive_issai_run1_final/`
+**Verdict: Rejected. Marked `REJECTED_cp_lr_degrades_audio` on server.**
+
+---
+
+### Run B3 — REJECTED (cp_lr degrades audio)
+
+```bash
+--resume_from run_b2/best --lr 3e-7 --cp_lr 1e-5 --max_steps 500
+```
+
+| Step | eval loss | sub loss |
+|------|-----------|----------|
+| 100  | 5.672     | 7.63     |
+| 200  | 5.661     | 7.60     |
+| 300  | 5.653     | 7.59     |
+| 400  | 5.645     | 7.58     |
+| 500  | **5.642** | **7.47** |
+
+Sub loss dropped below random baseline (7.47 < 7.62) for the first time. Eval loss also steadily improved. Despite this, **perceptual sample quality was worse than B1**.
+
+**Critical finding:** Lower sub loss did NOT correlate with better audio quality. Training the code_predictor reduced sub loss but degraded acoustic quality. The best checkpoint was selected by perceptual sample quality, not validation/sub loss.
+
+**Verdict: Rejected. Marked `REJECTED_cp_lr_degrades_audio` on server.**
+
+---
+
+## Final Checkpoint — `best_perceptual`
+
+**`/home/hcfk/checkpoints/best_perceptual`** = copy of `run_b1/best`
+
+Selected by perceptual listening, not by lowest validation or sub loss.
+
+### Rules established from B-path experiments
+
+| Rule | Rationale |
+|------|-----------|
+| `cp_lr` must stay 0 in continuation runs | Any CP LR degrades acoustic quality, even when sub loss improves |
+| Sub loss is NOT a proxy for audio quality | B3 had sub=7.47 (best ever) but worst audio |
+| LoRA-only continuation is safe at ultra-low LR | B1 (lr=1e-7, cp frozen) improved Turkish accent without breaking quality |
+| Stop at first sign of sample degradation | Do not rely on loss curves alone |
+
+### If further training is attempted
+
+Only LoRA-only, ultra-low LR:
+
+```bash
+--resume_from /home/hcfk/checkpoints/best_perceptual \
+--lr 5e-8  --cp_lr 0 \
+--max_steps 300 --sample_every 100 \
+--scheduler constant --warmup_steps 10 --grad_accum 4
+```
+
+Accept only if step 100/200/300 samples are perceptually better than B1. Otherwise B1 is final.
 
 ---
 
 ## Final Model
 
-**`issai_run1/best`** is the best checkpoint. It has the lowest eval loss from epoch 1 and produced clean, intelligible Turkish TTS output.
+**`/home/hcfk/checkpoints/best_perceptual`** is the production checkpoint. Selected by perceptual listening — more Turkish accent than issai_run1/best, no acoustic degradation.
 
 Use this for inference:
 ```bash
-python3 eval_epoch1.py \
+python3 inference.py \
     --model_dir   /home/hcfk/models/Qwen3-TTS-0.6B-Base \
-    --adapter_dir /home/hcfk/checkpoints/issai_run1/best \
-    --output_dir  ./eval_output
+    --adapter_dir /home/hcfk/checkpoints/best_perceptual \
+    --text        "Merhaba, bu bir test cümlesidir." \
+    --output      output.wav
 ```
 
 ---

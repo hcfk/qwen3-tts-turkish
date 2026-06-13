@@ -320,7 +320,45 @@ python3 train.py \
 
 Monitor at every 1000 steps. Compare each sample against run_b1/best. Stop immediately if noise or metallic artefacts appear.
 
-**Status:** Running (PID 642277). Results TBD.
+**Status:** Running (PID 642277).
+
+### Checkpoint Evaluation Plan
+
+| Milestone | Eval loss target | Question |
+|-----------|-----------------|---------|
+| **5K** | ~6.2 | C→K, 1923, yabancı aksan azalıyor mu? |
+| **10K** | ~5.8 | B1/best ile gerçek karşılaştırma |
+| **20K** | ~5.5 | issai_run1/best'e yaklaşma |
+| **45K** | ~5.2–5.4 | Full epoch final aday |
+
+Decision at 10K: if exp_c perceptually worse than run_b1/best → stop. If accent clearly reduced → continue to full epoch.
+
+### Fixed Test Set
+
+Always use `run_inference_test.py` (pscp transfer, UTF-8 safe). Same 5 sentences every evaluation:
+
+| Tag | Sentence | Tests |
+|-----|---------|-------|
+| s1 | Bugün hava çok güzel. | baseline |
+| s2 | Türkiye Cumhuriyeti bin dokuz yüz yirmi üç yılında kuruldu. | C/K, number reading |
+| s3 | Çocuklar çiçek, şeker ve üzüm yedi. | ç, ş, ü |
+| s4 | Öğrenciler ölçüm sonuçlarını değerlendirdi. | ö, ğ, ı |
+| s5 | Şirket yüzde otuz beş büyüme açıkladı. | ş, ü, EOS |
+
+Perceptual checklist per evaluation:
+- C/K confusion — "Cumhuriyeti" → "Kumhuriyeti"?
+- Number reading — Turkish or Chinese/English phonemes?
+- Turkish phonemes — ı, ğ, ü, ö, ş, ç correct?
+- EOS / trailing silence — clean ending?
+- Metallic / noise — any degradation?
+
+### Eval Loss Progression
+
+| Total steps | Eval loss | Perceptual note |
+|-------------|-----------|----------------|
+| 1.000 | 7.062 | 1923 Çince, C→K, yabancı aksan |
+| 2.000 | 6.717 | — |
+| 3.000 | 6.537 | "ilerleme yavaş ama var" |
 
 ---
 

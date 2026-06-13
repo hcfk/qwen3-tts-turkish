@@ -1,6 +1,6 @@
 """
-Quick inference test script — run directly on server.
-Contains Turkish text hardcoded to avoid SSH encoding issues.
+Standard inference test — fixed sentence set for consistent quality evaluation.
+Transfer via pscp (not plink) to preserve UTF-8 Turkish characters.
 
 Usage:
     python3 run_inference_test.py --adapter_dir /path/to/checkpoint --output_dir /path/to/out
@@ -13,12 +13,21 @@ from inference import load_model, generate
 
 MODEL_DIR = "/home/hcfk/models/Qwen3-TTS-0.6B-Base"
 
+# Fixed test set — do not change between evaluations
 SENTENCES = [
     ("s1", "Bugün hava çok güzel."),
     ("s2", "Türkiye Cumhuriyeti bin dokuz yüz yirmi üç yılında kuruldu."),
-    ("s3", "Merhaba, nasılsınız?"),
-    ("s4", "İstanbul, Türkiye'nin en büyük şehridir."),
+    ("s3", "Çocuklar çiçek, şeker ve üzüm yedi."),
+    ("s4", "Öğrenciler ölçüm sonuçlarını değerlendirdi."),
+    ("s5", "Şirket yüzde otuz beş büyüme açıkladı."),
 ]
+
+# Evaluation checklist (perceptual, not metric-based):
+#   C/K confusion       — "Cumhuriyeti" → "Kumhuriyeti"?
+#   Number reading      — "bin dokuz yüz" correct or Chinese/English phonemes?
+#   Turkish phonemes    — ı, ğ, ü, ö, ş, ç rendered correctly?
+#   EOS / trailing silence — clean ending or long silence?
+#   Metallic / noise    — any degradation vs previous checkpoint?
 
 def main():
     parser = argparse.ArgumentParser()

@@ -21,7 +21,7 @@ Fine-tuning Qwen3-TTS models for Turkish language TTS using staged LoRA on the [
 
 **0.6B status:** Released as v0.1-experimental. Stage 2 step 2000 = `best_perceptual`. See [MODEL_CARD.md](MODEL_CARD.md).
 
-**1.7B status:** Stage 1 complete (eval loss 7.79→7.14 in 1000 steps). Stage 2 in progress.
+**1.7B status:** Released as v0.2-experimental. Stage 2 step 1500 = best_perceptual_1.7b. Audio cleaner than 0.6B, same Turkish phoneme errors remain (C→K, Ç, Ü). Model-size scaling confirmed insufficient — next: G2P preprocessing experiment.
 
 ---
 
@@ -77,7 +77,7 @@ samples/
 | Experiment | Method | Status |
 |-----------|--------|--------|
 | exp_f Stage 1 | Attention+MLP LoRA rank 16, lr=5e-7 | ✅ Done — eval 7.79→7.14 in 1000 steps |
-| exp_f Stage 2 | Freeze MLP LoRA, attn-only lr=1e-7 | 🔄 Running |
+| exp_f Stage 2 step 1500 ✅ | Freeze MLP LoRA, attn-only lr=1e-7 | **best_perceptual_1.7b** — cleaner audio, same phoneme errors |
 
 ---
 
@@ -189,4 +189,6 @@ See [FINDINGS.md](FINDINGS.md) for the full list. Short version:
 - MLP LoRA helps only in a short early window (F6)
 - Staged LoRA (Stage 2) outperformed all other 0.6B approaches (F8)
 - 0.6B has a practical adaptation ceiling — 1.7B experiment now running (F9)
-- 1.7B learns significantly faster than 0.6B at same LR (2× eval loss drop in Stage 1)
+- 1.7B learns significantly faster than 0.6B at same LR (2× eval loss drop in Stage 1) (F10)
+- Model-size scaling improves audio clarity but does NOT fix Turkish phoneme errors (F11)
+- Next approach: G2P/pseudo-phoneme input preprocessing (experiment-g branch)

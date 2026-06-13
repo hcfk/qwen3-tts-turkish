@@ -1,63 +1,85 @@
 # Qwen3-TTS Turkish — Roadmap
 
-## 0.6B Status — CLOSED
+## Status Summary
 
-All 0.6B adaptation paths have been exhausted. Stage 2 step 2000 is the final checkpoint.
+### 0.6B — Closed (v0.1-experimental)
 
-| Experiment | Result |
-|-----------|--------|
-| Exp A — attention LoRA rank 64, lr=5e-6 | Understandable Turkish, strong accent |
-| Exp B1 — LoRA-only, CP frozen | Improved; earlier best_perceptual |
-| Exp B2/B3 — CP training | Rejected; audio degraded |
-| Exp C — attention+MLP LoRA rank 16 | Best at step 1K; degrades after |
-| Exp D Stage 2 — freeze MLP, attn-only lr=1e-7 | **Final best_perceptual at step 2000** |
-| Exp E — partial FT last 2 layers | Did NOT outperform Stage 2 (F9 confirmed) |
+Stage 2 step 2000 is the final checkpoint. LoRA adaptation ceiling reached (F9).
 
-**Release:** Stage 2 step 2000 → `best_perceptual` → v0.1-experimental on HuggingFace.
+### 1.7B — Closed (v0.2-experimental)
+
+Stage 2 step 1500 is the final checkpoint. Model-size scaling did not fix phoneme errors (F11).
+
+**Key finding across both models:** Audio quality and convergence speed improve with scale,
+but C→K, Ç, Ü, Ö, Ş phoneme mapping errors persist. Root cause: base model's
+Mandarin-dominant acoustic prior has no Turkish phoneme paths. LoRA cannot add
+new phoneme paths — it can only modify existing ones.
 
 ---
 
-## Next Direction — Qwen3-TTS-1.7B
+## What NOT to do next
 
-### Motivation
+| Approach | Why not |
+|----------|---------|
+| More LoRA steps (Stage 3) | Loss improves but phoneme errors don't — already confirmed |
+| Higher LoRA rank | Same prior problem, just more parameters in the wrong space |
+| CP training (cp_lr > 0) | Degrades audio every time (F3) |
+| Partial FT last N layers | Tried on 0.6B — did not help (F9) |
+| 3B or larger base LoRA | F11 predicts same result — size isn't the constraint |
 
-The 0.6B model has a practical adaptation ceiling (F9). Remaining issues (foreign accent, C→K) cannot be resolved with LoRA rank-16/64 or partial FT. The 1.7B model has more capacity for the phoneme/acoustic shift.
+---
 
-### Initial Strategy
+## Next Direction — Experiment G: G2P/Pseudo-phoneme Preprocessing
 
-Replicate the best known 0.6B path on the 1.7B model:
+### Hypothesis
 
-```text
-Stage 1: attention+MLP LoRA rank 16, lr=5e-7, cp_lr=0
-         max_steps=1000, sample_every=200
-         → perceptual check at step 1000 (expected to be the best early window)
+Turkish phoneme errors may be fixable at the **input** level, not the weight level.
+The base model handles Latin/English/German phoneme sequences. If Turkish characters
+are substituted with ASCII approximations that map to the correct phoneme paths,
+the model may produce correct Turkish sounds without any additional training.
 
-Stage 2: freeze MLP LoRA, attention-only lr=1e-7, cp_lr=0
-         max_steps=2000, save_at_steps=500,1000,1500,2000
-         → perceptual check at each snapshot
+### Level 1 — Inference-only spelling hack (no training needed)
+
+Test 3 substitution schemas on all 5 fixed sentences using `g2p_spelling_test.py`:
+
+```bash
+python3 g2p_spelling_test.py \
+    --model_dir   /home/hcfk/models/Qwen3-TTS-1.7B-Base \
+    --adapter_dir /home/hcfk/checkpoints/best_perceptual_1.7b \
+    --output_dir  /home/hcfk/eval_g2p_test
 ```
 
-### Key Rules (carry over from 0.6B)
+**Schemas to test:**
 
-| Rule | Reason |
-|------|--------|
-| cp_lr = 0 always | CP training degrades audio (F3) |
-| MLP LoRA ≤1K steps only | Longer degrades acoustic prior (F6) |
-| Checkpoint selection by listening | Eval loss != perceptual peak (F8) |
-| --save_at_steps mandatory in Stage 2 | Perceptual peak may not be at final step |
-| scheduler = constant | Cosine kills effective CP LR mid-run |
+| Schema | Key substitutions | Rationale |
+|--------|-------------------|-----------|
+| baseline | none | reference |
+| schema_a | c→dj, ç→tsch, ş→sch, ü→ue, ö→oe | German digraphs (model has German) |
+| schema_b | c→j, ç→ch, ş→sh, ü→yu, ö→ur | English phoneme approximations |
+| schema_c | c→j, ç→ch only | Conservative — fix worst offenders only |
 
-### Success Criteria
+**Decision:** If any schema fixes C/Ç without breaking other phonemes → proceed to Level 2.
+If no schema works → the prior cannot be routed around; need different base model.
 
-Stage 2 step 2000 on 1.7B should be evaluated against the 0.6B best_perceptual on the same 5 test sentences. Specific targets:
+### Level 2 — Pseudo-phoneme dataset + fine-tune (if Level 1 shows promise)
 
-- C→K substitution reduced or eliminated
-- Foreign accent clearly less than 0.6B best_perceptual
-- All 5 test sentences intelligible with clean EOS
+If a good schema is found:
+1. Apply schema to all ISSAI training texts
+2. Short fine-tune: 500–1000 steps, attention+MLP LoRA, lr=5e-7
+3. Evaluate whether phoneme corrections hold
 
-### If 1.7B Still Insufficient
+### Level 3 — If pseudo-phoneme fails
 
 Consider:
-- Turkish-capable TTS base model (e.g., one with native multilingual phoneme coverage)
-- Data augmentation (Turkish G2P pre-processing, phoneme-level supervision)
-- Larger dataset (ISSAI is ~179K utterances; more data may help unlock deeper adaptation)
+- Turkish-native TTS base model (e.g., a model pretrained on Turkish speech)
+- G2P model (proper phoneme converter like `espeak-ng -v tr`) feeding IPA to a phoneme-aware TTS
+- Different architecture altogether
+
+---
+
+## Checkpoints
+
+| Checkpoint | Version | Notes |
+|-----------|---------|-------|
+| `best_perceptual` | 0.6B v0.1 | 0.6B Stage 2 step 2000 |
+| `best_perceptual_1.7b` | 1.7B v0.2 | 1.7B Stage 2 step 1500 |

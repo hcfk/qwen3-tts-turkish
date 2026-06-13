@@ -634,7 +634,33 @@ python3 /home/hcfk/train.py \
   --max_steps 2000 --sample_every 500 --save_at_steps "500,1000,1500,2000" --grad_accum 4
 ```
 
-**Status:** Running (launched 2026-06-14). Results to be added after completion.
+**Results — completed in 15.7 minutes:**
+
+| Step | Eval loss |
+|------|-----------|
+| 500 | 7.1216 (snapshot) |
+| 1000 | 7.1046 (snapshot) |
+| 1500 | 7.0914 (snapshot) |
+| 2000 | 7.0770 (snapshot) |
+
+Loss dropped steadily to the end — no plateau. However, perceptual evaluation revealed step 2000 slightly regressed vs step 1500 (same pattern as 0.6B Stage 2). Step 1500 selected as best.
+
+**Perceptual findings (full 5-sentence eval on step 1500):**
+- Audio noticeably cleaner and EOS more stable than 0.6B best_perceptual
+- s2 duration 4.3s (vs 0.6B ~5-6s) — cleaner ending
+- C→K substitution: still present ("Kumhuriyeti")
+- Ç endings: still wrong ("üç" → "ük")
+- Turkish vowels (ü, ö, ı): partially correct but unstable
+- Overall: slightly better than 0.6B on audio quality, same phoneme error pattern
+
+**Conclusion:** Model size (0.6B→1.7B) improved audio clarity but did NOT fix Turkish phoneme mapping errors. The root cause is the base model's Mandarin-dominant acoustic prior, which LoRA cannot fully override regardless of model size or LoRA rank. F11 confirmed.
+
+**Decision:** Close 1.7B LoRA path. No more Stage 3 / CP training / partial FT.
+
+**Checkpoint promoted:** `best_perceptual_1.7b` = exp_f Stage 2 step 1500.
+Released as v0.2-experimental.
+
+**Next experiment:** G2P/pseudo-phoneme preprocessing (experiment-g branch).
 
 ---
 

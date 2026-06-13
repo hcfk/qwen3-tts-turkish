@@ -68,6 +68,18 @@ Full 5-sentence `run_inference_test.py` evaluation from Stage 2 step 2000.
 Number normalizer active. Best perceptual result across all experiments.
 **This is the final best_perceptual checkpoint for Qwen3-TTS-0.6B.**
 
+## 14 — Exp F 1.7B Stage 2 Step 1500 — `best_perceptual_1.7b` ✅
+
+Full 5-sentence `run_inference_test.py` on Stage 2 step 1500.
+Audio noticeably cleaner than 0.6B, EOS more stable.
+C→K, Ç, Ü phoneme errors still present — same as 0.6B.
+This is the final checkpoint for the 1.7B LoRA path (v0.2-experimental).
+
+## 13 — Exp F 1.7B Stage 2 (steps 500–2000)
+
+Stage 2 from Stage 1 step 1000. MLP LoRA frozen, attention-only lr=1e-7.
+Samples at steps 500/1000/1500/2000. Step 2000 slightly worse than 1500 perceptually.
+
 ## 12 — Exp F 1.7B Stage 1 (steps 200–1000)
 
 `Qwen3-TTS-12Hz-1.7B-Base`, attention+MLP LoRA rank 16, lr=5e-7, max_steps=1000.

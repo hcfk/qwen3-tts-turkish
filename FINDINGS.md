@@ -131,7 +131,28 @@ The 1.7B model's higher parameter count allows much faster absorption of the Tur
 
 Importantly, both models share the **same speech tokenizer** (identical MD5) and the same codec constants — so the ISSAI tokens prepared for 0.6B are directly reusable for 1.7B without re-tokenization.
 
-**Implication:** 1.7B Stage 2 likely has more headroom to reduce accent and C→K than 0.6B ever did.
+**Implication:** 1.7B produces cleaner audio and faster convergence, but the same phoneme errors persist (F11).
+
+---
+
+## F11 — Model-size scaling does not fix Turkish phoneme errors
+
+**From exp_f Stage 2 full perceptual evaluation (2026-06-14):**
+
+1.7B Stage 2 step 1500 vs 0.6B Stage 2 step 2000:
+
+| Dimension | 0.6B best | 1.7B best |
+|-----------|-----------|-----------|
+| Audio clarity | Moderate | Slightly cleaner |
+| EOS stability | Acceptable | Better |
+| C→K substitution | Present | Still present |
+| Ç endings ("üç") | Wrong | Still wrong |
+| Turkish vowels | Unstable | Unstable |
+| Eval loss | ~7.4x | 7.091 |
+
+**Conclusion:** Scaling from 0.6B to 1.7B improves audio quality and convergence speed but does not resolve Turkish phoneme mapping errors. The root cause is the base model's Mandarin-dominant acoustic prior. LoRA — regardless of model size or rank — can partially adapt prosody and voice quality, but cannot fully remap C/Ç/Ğ/Ü/Ö phoneme boundaries that don't exist in the base model's training distribution.
+
+**Next hypothesis:** Turkish phoneme errors may be fixable at the **input** level rather than the weight level. Pseudo-phoneme preprocessing (c→jh, ç→ch, ş→sh, ü→ue) may route Turkish characters through phoneme paths the base model already handles correctly.
 
 ---
 
@@ -148,4 +169,5 @@ Importantly, both models share the **same speech tokenizer** (identical MD5) and
 | F7: SSH breaks Turkish chars | Use pscp + hardcoded test script |
 | F8: Staged LoRA works; eval loss ≠ perceptual peak | Always snapshot at candidate steps |
 | F9: 0.6B ceiling confirmed — partial FT also failed | Moved to 1.7B experiment |
-| F10: 1.7B learns 2.3× faster than 0.6B at same LR | 1.7B Stage 2 has more headroom for accent reduction |
+| F10: 1.7B learns 2.3× faster than 0.6B at same LR | Faster convergence, cleaner audio, but same phoneme errors |
+| F11: Model-size scaling does not fix Turkish phoneme errors | Root cause is base model acoustic prior, not LoRA capacity |

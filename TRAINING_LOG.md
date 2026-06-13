@@ -4,6 +4,31 @@ Chronological notes on actual training runs — what we used, what broke, and wh
 
 ---
 
+## Sub Loss Diagnostic Gate
+
+**This is the primary gate before any training decision.** Check sub loss trend in the first 500–1000 steps.
+
+Random baseline: `log(2048) = 7.62`
+
+| Sub loss result | Diagnosis | Next action |
+|----------------|-----------|-------------|
+| **stays ~7.6** | target/codebook alignment broken — LR is not the issue | Stop tuning LR. Debug: sub_targets shape, sub_logits shape, codebook order, target shift, EOS/PAD mask, vocab range 0–2047 |
+| **drops below 7.2** | code_predictor CAN learn, but LoRA hidden drift interferes | Joint training: `lr_lora=5e-7–1e-6`, `cp_lr=2e-5–5e-5`, `scheduler=constant`, `grad_clip=1.0` |
+| **reaches 6.x band** | CP-only is healthy | Stage training: (1) 500–1000 steps CP-only, (2) unfreeze LoRA at very low LR, (3) reduce CP LR slightly, continue jointly |
+
+**Sample quality gate** (after sub loss improves):
+
+| Sample output | Diagnosis | Next action |
+|--------------|-----------|-------------|
+| sub drops but sample still noisy | decode/reconstruction problem | Check inference codebook order, decode path |
+| sub drops and sample ends cleanly | training path correct | Proceed to quality/accent fine-tune phase |
+
+**CP-only isolation test** (`--train_code_predictor_only`): the most critical diagnostic.
+- Target: `sub_loss < 7.2` at 2000 steps
+- If sub stays 7.4–7.6: wiring/alignment is broken — do not continue training without fixing it first
+
+---
+
 ## Epoch 1 — `issai_run1`
 
 **Command:**

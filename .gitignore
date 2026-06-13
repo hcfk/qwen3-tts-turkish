@@ -31,6 +31,11 @@ checkpoints/
 *.log
 runs/
 
+# Audio samples — excluded globally but samples/ dir is tracked
+eval_output/
+!samples/
+!samples/**
+
 # Claude Code
 CLAUDE.md
 
